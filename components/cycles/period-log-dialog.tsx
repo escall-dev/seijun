@@ -12,6 +12,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { DatePicker } from "@/components/ui/date-picker"
+import { calculateInclusiveDays, getTodayDateString } from "@/lib/calculations/cycle-calculations"
 import {
   createCycleAction,
   updateCycleAction,
@@ -26,14 +27,6 @@ interface PeriodLogDialogProps {
   onSuccess?: (cycleId?: string) => void
 }
 
-function calculateInclusiveDays(startStr: string, endStr: string): number {
-  const start = new Date(startStr + "T00:00:00")
-  const end = new Date(endStr + "T00:00:00")
-  const diffTime = end.getTime() - start.getTime()
-  const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24))
-  return diffDays + 1
-}
-
 interface PeriodLogFormProps {
   cycleToEdit?: CycleRecord | null
   onClose: () => void
@@ -42,7 +35,7 @@ interface PeriodLogFormProps {
 
 function PeriodLogForm({ cycleToEdit, onClose, onSuccess }: PeriodLogFormProps) {
   const isEditing = Boolean(cycleToEdit)
-  const todayStr = new Date().toISOString().split("T")[0]
+  const todayStr = getTodayDateString()
 
   const [startDate, setStartDate] = React.useState(
     cycleToEdit?.start_date || todayStr
@@ -145,7 +138,14 @@ function PeriodLogForm({ cycleToEdit, onClose, onSuccess }: PeriodLogFormProps) 
 
       {/* End Date — always shown, optional */}
       <div className="space-y-1.5">
-        <Label htmlFor="periodEndDate">Period End Date</Label>
+        <div className="flex items-center justify-between gap-3">
+          <Label htmlFor="periodEndDate">Period End Date</Label>
+          {endDate && (
+            <Button type="button" variant="ghost" size="sm" onClick={() => setEndDate("")} disabled={isPending} className="h-7 px-2 text-xs">
+              Clear end date
+            </Button>
+          )}
+        </div>
         <DatePicker
           id="periodEndDate"
           value={endDate}
@@ -222,11 +222,11 @@ export function PeriodLogDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Calendar className="size-5 text-primary" />
-            <span>{isEditing ? "Edit Cycle Period" : "Log Period"}</span>
+            <span>{isEditing ? "Edit Period" : "Log Period"}</span>
           </DialogTitle>
           <DialogDescription>
             {isEditing
-              ? "Update cycle dates or notes. Period days will automatically reconcile."
+              ? "Update the actual period start and end dates. Leave the end date empty while ongoing."
               : "Record your period start and end dates to track your cycle pattern."}
           </DialogDescription>
         </DialogHeader>

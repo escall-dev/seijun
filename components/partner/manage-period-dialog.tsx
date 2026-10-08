@@ -11,13 +11,17 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { recordPartnerPeriodAction } from "@/app/actions/partner-mutations"
+import { recordPartnerPeriodAction, updatePartnerPeriodAction } from "@/app/actions/partner-mutations"
+import { calculateInclusiveDays, getTodayDateString } from "@/lib/calculations/cycle-calculations"
 import { AlertCircle, Check, Loader2 } from "lucide-react"
 
 export interface ManagePeriodDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   partnerDisplayName?: string
+  cycleId?: string | null
+  initialStartDate?: string | null
+  initialEndDate?: string | null
   onSuccess?: () => void
 }
 
@@ -33,9 +37,12 @@ export function ManagePeriodDialog({
   open,
   onOpenChange,
   partnerDisplayName,
+  cycleId,
+  initialStartDate,
+  initialEndDate,
   onSuccess,
 }: ManagePeriodDialogProps) {
-  const todayStr = new Date().toISOString().split("T")[0]
+  const todayStr = getTodayDateString()
   const [startDate, setStartDate] = React.useState(todayStr)
   const [endDate, setEndDate] = React.useState("")
   const [submitting, setSubmitting] = React.useState(false)
@@ -45,8 +52,8 @@ export function ManagePeriodDialog({
   // Reset form when dialog opens
   React.useEffect(() => {
     if (open) {
-      setStartDate(new Date().toISOString().split("T")[0])
-      setEndDate("")
+      setStartDate(initialStartDate || todayStr)
+      setEndDate(initialEndDate || "")
       setErrorMsg(null)
       setSuccess(false)
     }
@@ -59,10 +66,9 @@ export function ManagePeriodDialog({
     setSuccess(false)
 
     try {
-      const res = await recordPartnerPeriodAction({
-        startDate,
-        endDate: endDate ? endDate : null,
-      })
+      const res = cycleId
+        ? await updatePartnerPeriodAction({ cycleId, startDate, endDate: endDate || null })
+        : await recordPartnerPeriodAction({ startDate, endDate: endDate || null })
 
       if (res.ok) {
         setSuccess(true)
@@ -86,10 +92,10 @@ export function ManagePeriodDialog({
       <DialogContent className="max-w-sm rounded-3xl p-6">
         <DialogHeader className="space-y-1">
           <DialogTitle className="text-base font-semibold">
-            Manage Partner Period
+            {cycleId ? "Edit Partner Period" : "Manage Partner Period"}
           </DialogTitle>
           <DialogDescription className="text-xs text-muted-foreground">
-            Record period start and optional end date for {partnerDisplayName || "partner"}.
+            Edit the actual start and end dates for {partnerDisplayName || "partner"}. Status follows the end date.
           </DialogDescription>
         </DialogHeader>
 
@@ -120,7 +126,10 @@ export function ManagePeriodDialog({
             </div>
 
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium">Period End Date (Optional)</Label>
+              <div className="flex items-center justify-between gap-2">
+                <Label className="text-xs font-medium">Period End Date</Label>
+                {endDate && <Button type="button" variant="ghost" size="sm" onClick={() => setEndDate("")} disabled={submitting} className="h-7 px-2 text-[10px]">Clear date</Button>}
+              </div>
               <Input
                 type="date"
                 max={todayStr}
@@ -130,7 +139,7 @@ export function ManagePeriodDialog({
                 className="h-10 text-xs rounded-xl"
               />
               <p className="text-[10px] text-muted-foreground">
-                Leave empty if period is currently ongoing.
+                {endDate ? `Completed · ${calculateInclusiveDays(startDate, endDate)} ${calculateInclusiveDays(startDate, endDate) === 1 ? "day" : "days"}` : "Ongoing · leave empty until the actual last day."}
               </p>
             </div>
 
@@ -155,7 +164,7 @@ export function ManagePeriodDialog({
                     <span>Saving...</span>
                   </>
                 ) : (
-                  <span>Record Period</span>
+                  <span>{cycleId ? "Save Changes" : "Record Period"}</span>
                 )}
               </Button>
             </div>

@@ -1,11 +1,18 @@
+"use client"
+
 import * as React from "react"
 import Link from "next/link"
 import { Badge } from "@/components/ui/badge"
 import type { LatestPeriodInfo, EstimatedNextPeriod } from "@/lib/calculations/cycle-calculations"
+import type { CycleRecord } from "@/app/actions/cycles"
+import { Button } from "@/components/ui/button"
+import { PeriodLogDialog } from "@/components/cycles/period-log-dialog"
+import { useAppRouter } from "@/components/navigation/use-app-router"
 import { Droplet, Calendar, Clock, ArrowRight } from "lucide-react"
 
 interface PeriodInsightsProps {
   latestPeriod: LatestPeriodInfo | null
+  periodCycle: CycleRecord | null
   estimatedNextPeriod: EstimatedNextPeriod | null
   onboardingStartDate?: string | null
 }
@@ -23,9 +30,12 @@ function formatDate(dateStr: string, includeYear: boolean = true): string {
 
 export function PeriodInsights({
   latestPeriod,
+  periodCycle,
   estimatedNextPeriod,
   onboardingStartDate,
 }: PeriodInsightsProps) {
+  const [editOpen, setEditOpen] = React.useState(false)
+  const router = useAppRouter()
   return (
     <div className="rounded-2xl border border-border/80 dark:border-border/60 bg-card p-4 sm:p-5 shadow-redi-card">
       <div className="grid grid-cols-2 gap-3 sm:gap-6 divide-x divide-border/60">
@@ -76,13 +86,20 @@ export function PeriodInsights({
               </div>
 
               <div className="pt-0.5">
-                <Link
-                  href={`/cycles/${latestPeriod.cycleId}`}
-                  className="inline-flex items-center gap-1 text-[11px] sm:text-xs font-medium text-primary hover:underline group"
-                >
-                  <span>View cycle</span>
-                  <ArrowRight className="size-3 group-hover:translate-x-0.5 transition-transform" />
-                </Link>
+                <div className="flex items-center gap-3 flex-wrap">
+                  {periodCycle && (
+                    <Button type="button" variant="outline" size="sm" onClick={() => setEditOpen(true)} className="h-8 px-2.5 text-xs">
+                      {latestPeriod.isOngoing ? "End Period" : "Edit Period"}
+                    </Button>
+                  )}
+                  <Link
+                    href={`/cycles/${latestPeriod.cycleId}`}
+                    className="inline-flex items-center gap-1 text-[11px] sm:text-xs font-medium text-primary hover:underline group"
+                  >
+                    <span>View cycle</span>
+                    <ArrowRight className="size-3 group-hover:translate-x-0.5 transition-transform" />
+                  </Link>
+                </div>
               </div>
             </div>
           ) : (
@@ -155,6 +172,12 @@ export function PeriodInsights({
           )}
         </div>
       </div>
+      <PeriodLogDialog
+        open={editOpen}
+        onOpenChange={setEditOpen}
+        cycleToEdit={periodCycle}
+        onSuccess={() => router.refresh()}
+      />
     </div>
   )
 }

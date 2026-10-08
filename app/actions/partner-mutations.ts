@@ -11,7 +11,7 @@ import {
 import { syncCycleLengthsForUser } from "@/app/actions/cycles"
 import { sendPartnerCoManagementNotification } from "@/lib/partner/notification"
 import { deliverNoteNotifications } from "@/lib/server/note-notifications"
-import { getTodayDateString } from "@/lib/calculations/cycle-calculations"
+import { calculateInclusiveDays, getTodayDateString, isValidDateString } from "@/lib/calculations/cycle-calculations"
 import { NOTE_MAX_LENGTH } from "@/lib/notes/types"
 
 /**
@@ -37,24 +37,19 @@ export interface PartnerMutationResult<T = undefined> {
 
 // ─── Utility Helpers ──────────────────────────────────────────────────────────
 
-function calculateInclusiveDays(startStr: string, endStr: string): number {
-  const start = new Date(startStr + "T00:00:00")
-  const end = new Date(endStr + "T00:00:00")
-  const diffTime = end.getTime() - start.getTime()
-  return Math.round(diffTime / (1000 * 60 * 60 * 24)) + 1
-}
-
 function generateDateRange(startStr: string, endStr: string): string[] {
   const dates: string[] = []
-  const current = new Date(startStr + "T00:00:00")
-  const end = new Date(endStr + "T00:00:00")
+  const [startYear, startMonth, startDay] = startStr.split("-").map(Number)
+  const [endYear, endMonth, endDay] = endStr.split("-").map(Number)
+  const current = new Date(Date.UTC(startYear, startMonth - 1, startDay))
+  const end = new Date(Date.UTC(endYear, endMonth - 1, endDay))
 
   while (current <= end) {
-    const y = current.getFullYear()
-    const m = String(current.getMonth() + 1).padStart(2, "0")
-    const d = String(current.getDate()).padStart(2, "0")
+    const y = current.getUTCFullYear()
+    const m = String(current.getUTCMonth() + 1).padStart(2, "0")
+    const d = String(current.getUTCDate()).padStart(2, "0")
     dates.push(`${y}-${m}-${d}`)
-    current.setDate(current.getDate() + 1)
+    current.setUTCDate(current.getUTCDate() + 1)
   }
   return dates
 }
@@ -110,7 +105,7 @@ export async function recordPartnerPeriodAction(
   const endDate = input.endDate?.trim() || null
 
   // Validate start date
-  if (!startDate || !/^\d{4}-\d{2}-\d{2}$/.test(startDate)) {
+  if (!startDate || !isValidDateString(startDate)) {
     return { ok: false, error: "Please provide a valid period start date (YYYY-MM-DD)." }
   }
   if (startDate > todayStr) {
@@ -120,7 +115,7 @@ export async function recordPartnerPeriodAction(
   // Validate end date if provided
   let periodDuration: number | null = null
   if (endDate) {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(endDate)) {
+    if (!isValidDateString(endDate)) {
       return { ok: false, error: "Please provide a valid period end date (YYYY-MM-DD)." }
     }
     if (endDate > todayStr) {
@@ -200,6 +195,7 @@ export async function recordPartnerPeriodAction(
     revalidatePath("/partner")
     revalidatePath("/dashboard")
     revalidatePath("/cycles")
+    revalidatePath("/calendar")
 
     return { ok: true, data: { cycleId: newCycle.id } }
   } catch (err) {
@@ -243,7 +239,7 @@ export async function updatePartnerPeriodAction(
     return { ok: false, error: "Cycle ID is required." }
   }
 
-  if (!startDate || !/^\d{4}-\d{2}-\d{2}$/.test(startDate)) {
+  if (!startDate || !isValidDateString(startDate)) {
     return { ok: false, error: "Please provide a valid period start date (YYYY-MM-DD)." }
   }
   if (startDate > todayStr) {
@@ -252,7 +248,7 @@ export async function updatePartnerPeriodAction(
 
   let periodDuration: number | null = null
   if (endDate) {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(endDate)) {
+    if (!isValidDateString(endDate)) {
       return { ok: false, error: "Please provide a valid period end date (YYYY-MM-DD)." }
     }
     if (endDate > todayStr) {
@@ -366,6 +362,7 @@ export async function updatePartnerPeriodAction(
     revalidatePath("/partner")
     revalidatePath("/dashboard")
     revalidatePath("/cycles")
+    revalidatePath("/calendar")
 
     return { ok: true, data: { cycleId } }
   } catch (err) {

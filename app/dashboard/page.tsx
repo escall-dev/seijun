@@ -170,6 +170,7 @@ export default async function DashboardPage() {
       {/* Period Insights: Last Period & Next Expected Period */}
       <PeriodInsights
         latestPeriod={latestPeriod}
+        periodCycle={cycles.find((cycle) => cycle.id === latestPeriod?.cycleId) ?? null}
         estimatedNextPeriod={estimatedNextPeriod}
         onboardingStartDate={onboardingStartDate}
       />

@@ -190,6 +190,7 @@ export async function getSharedCycleEstimates(
  * Independently authorized from cycle_estimates.
  */
 export interface SharedPeriodStatus {
+  cycleId: string | null
   isOnPeriod: boolean
   currentPeriodDay: number | null
   lastPeriodStartDate: string | null
@@ -231,6 +232,7 @@ export async function getSharedPeriodStatus(
         ok: true,
         data: {
           isOnPeriod: false,
+          cycleId: null,
           currentPeriodDay: null,
           lastPeriodStartDate: null,
           lastPeriodEndDate: null,
@@ -260,10 +262,9 @@ export async function getSharedPeriodStatus(
     const { getTodayDateString } = await import("@/lib/calculations/cycle-calculations")
     const todayStr = getTodayDateString()
 
-    // Check if currently on period
+    // The latest cycle is the current period record; only its actual end date closes it.
     const latestCycle = cyclesRaw[0]
-    const latestPeriodDays = daysByCycle.get(latestCycle.id) || []
-    const isOnPeriod = latestPeriodDays.some((pd) => pd.date === todayStr)
+    const isOnPeriod = latestCycle.start_date <= todayStr && latestCycle.end_date === null
 
     // Find last period info
     let lastPeriodStartDate: string | null = null
@@ -271,24 +272,20 @@ export async function getSharedPeriodStatus(
     let lastPeriodDuration: number | null = null
     let currentPeriodDay: number | null = null
 
-    for (const cycle of cyclesRaw) {
-      const pDays = daysByCycle.get(cycle.id) || []
-      if (pDays.length > 0) {
-        const sortedDays = [...pDays].sort((a, b) => a.date.localeCompare(b.date))
-        lastPeriodStartDate = sortedDays[0].date
-        lastPeriodEndDate = cycle.end_date || sortedDays[sortedDays.length - 1].date
-        lastPeriodDuration = cycle.period_duration || sortedDays.length
-
-        if (isOnPeriod) {
-          currentPeriodDay = daysBetween(lastPeriodStartDate, todayStr) + 1
-        }
-        break
-      }
+    const latestPeriodDays = daysByCycle.get(latestCycle.id) || []
+    if (latestPeriodDays.length > 0 || latestCycle.end_date || isOnPeriod) {
+      lastPeriodStartDate = latestCycle.start_date
+      lastPeriodEndDate = latestCycle.end_date
+      lastPeriodDuration = latestCycle.end_date
+        ? latestCycle.period_duration || daysBetween(latestCycle.start_date, latestCycle.end_date) + 1
+        : null
+      if (isOnPeriod) currentPeriodDay = daysBetween(latestCycle.start_date, todayStr) + 1
     }
 
     return {
       ok: true,
       data: {
+        cycleId: lastPeriodStartDate ? latestCycle.id : null,
         isOnPeriod,
         currentPeriodDay,
         lastPeriodStartDate,

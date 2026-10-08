@@ -2,7 +2,7 @@
 
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server"
 import { getServerUserProfile } from "@/lib/server/profile"
-import { calculateDaysBetween, calculateInclusiveDays, getRecordedCycleEnd, getTodayDateString } from "@/lib/calculations/cycle-calculations"
+import { calculateDaysBetween, calculateInclusiveDays, getRecordedCycleEnd, getTodayDateString, isValidDateString } from "@/lib/calculations/cycle-calculations"
 import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
 
@@ -342,7 +342,7 @@ export async function createCycleAction(
   const todayStr = getTodayDateString()
 
   // Validate start date
-  if (!startDate || !/^\d{4}-\d{2}-\d{2}$/.test(startDate)) {
+  if (!startDate || !isValidDateString(startDate)) {
     return { success: false, error: "Please select a valid start date." }
   }
   if (startDate > todayStr) {
@@ -352,7 +352,7 @@ export async function createCycleAction(
   // Validate end date if provided
   let periodDuration: number | null = null
   if (endDate) {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(endDate)) {
+    if (!isValidDateString(endDate)) {
       return { success: false, error: "Please select a valid end date." }
     }
     if (endDate > todayStr) {
@@ -459,7 +459,7 @@ export async function updateCycleAction(
 
   const todayStr = getTodayDateString()
 
-  if (!startDate || !/^\d{4}-\d{2}-\d{2}$/.test(startDate)) {
+  if (!startDate || !isValidDateString(startDate)) {
     return { success: false, error: "Please select a valid start date." }
   }
   if (startDate > todayStr) {
@@ -468,7 +468,7 @@ export async function updateCycleAction(
 
   let periodDuration: number | null = null
   if (endDate) {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(endDate)) {
+    if (!isValidDateString(endDate)) {
       return { success: false, error: "Please select a valid end date." }
     }
     if (endDate > todayStr) {
@@ -590,6 +590,7 @@ export async function updateCycleAction(
     revalidatePath("/cycles")
     revalidatePath(`/cycles/${cycleId}`)
     revalidatePath("/dashboard")
+    revalidatePath("/calendar")
     return { success: true, cycleId }
   } catch (err: unknown) {
     return {

@@ -16,6 +16,23 @@ assert.equal(calc.calculateCurrentCycleDay("2026-12-31", "2027-01-01"), 2)
 assert.equal(calc.calculateCurrentCycleDay("2024-02-28", "2024-03-01"), 3)
 assert.equal(calc.calculateCurrentCycleDay("2026-03-07", "2026-03-09"), 3)
 assert.equal(calc.calculateCurrentCycleDay("2026-10-01", "2026-10-01"), 1)
+assert.equal(calc.calculateInclusiveDays("2026-10-03", "2026-10-03"), 1)
+assert.equal(calc.calculateInclusiveDays("2026-10-03", "2026-10-04"), 2)
+assert.equal(calc.calculateInclusiveDays("2026-10-03", "2026-10-07"), 5)
+assert.equal(calc.calculateInclusiveDays("2026-10-03", "2026-10-20"), 18)
+assert.equal(calc.isValidDateString("2024-02-29"), true)
+assert.equal(calc.isValidDateString("2026-02-30"), false)
+assert.equal(calc.isValidDateString("2026-13-01"), false)
+const completedPeriodCycle = {
+  ...cycle("2026-10-03"), end_date: "2026-10-07", period_duration: 5,
+  period_days: ["2026-10-03", "2026-10-04", "2026-10-05", "2026-10-06", "2026-10-07"].map(date => ({ date })),
+}
+const latestPeriod = calc.getLatestPeriod([completedPeriodCycle])
+assert.equal(latestPeriod.isOngoing, false)
+assert.equal(latestPeriod.duration, 5)
+assert.equal(latestPeriod.endDate, "2026-10-07")
+assert.equal(calc.calculateCurrentCycleDay(completedPeriodCycle.start_date, "2026-10-08"), 6)
+assert.equal(calc.getRecordedCycleEnd(completedPeriodCycle, [completedPeriodCycle]), null)
 assert.equal(calc.calculateAverageCycleLength([]), null)
 assert.equal(calc.calculateAverageCycleLength([cycle("2026-01-01")]), null)
 assert.equal(calc.calculateAverageCycleLength([cycle("2026-01-01"), cycle("2026-01-29")]), 28)

@@ -28,13 +28,13 @@ import {
   EyeOff,
   Loader2,
   AlertCircle,
+  Check,
   UserX,
   CalendarDays,
   TrendingUp,
   Clock,
   Plus,
   Edit3,
-  Check,
   Sparkles,
 } from "lucide-react"
 import {
@@ -48,10 +48,8 @@ import {
   type SharedCyclePreferencesResult,
   type FullPartnerDashboardResult,
 } from "@/app/actions/partner-shared"
-import {
-  recordPartnerPeriodAction,
-  updatePartnerCyclePreferencesAction,
-} from "@/app/actions/partner-mutations"
+import { updatePartnerCyclePreferencesAction } from "@/app/actions/partner-mutations"
+import { ManagePeriodDialog } from "@/components/partner/manage-period-dialog"
 import { useAppRouter } from "@/components/navigation/use-app-router"
 import { CycleContextSwitcher } from "@/components/cycle-context/cycle-context-switcher"
 import { AffinityCard } from "@/components/partner/affinity-card"
@@ -611,6 +609,7 @@ function PeriodStatusCard({
   onPeriodUpdated: () => void
 }) {
   const [modalOpen, setModalOpen] = React.useState(false)
+  const [creatingPeriod, setCreatingPeriod] = React.useState(false)
 
   if (!data.ok || !data.data) return null
 
@@ -634,11 +633,24 @@ function PeriodStatusCard({
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setModalOpen(true)}
+                onClick={() => { setCreatingPeriod(false); setModalOpen(true) }}
                 className="h-8 px-2.5 text-xs gap-1.5 rounded-xl border-rose-500/30 text-rose-500 hover:bg-rose-500/10 cursor-pointer font-medium"
               >
                 <Plus className="size-3.5" />
-                <span>Manage Period</span>
+                <span>{d.cycleId ? "Edit Period" : "Manage Period"}</span>
+              </Button>
+            )}
+            {canManage && d.cycleId && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                aria-label="Log a new period"
+                title="Log a new period"
+                onClick={() => { setCreatingPeriod(true); setModalOpen(true) }}
+                className="size-8 text-rose-500"
+              >
+                <Plus className="size-4" />
               </Button>
             )}
           </div>
@@ -666,8 +678,35 @@ function PeriodStatusCard({
             )}
             {d.lastPeriodStartDate && (
               <div className="flex items-center justify-between">
-                <span className="text-xs text-muted-foreground">Last Period</span>
+                <span className="text-xs text-muted-foreground">Period start date</span>
                 <span className="text-xs font-medium text-foreground">{formatDate(d.lastPeriodStartDate)}</span>
+              </div>
+            )}
+            {d.cycleId && (
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">Period end date</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-medium text-foreground">
+                    {d.lastPeriodEndDate ? formatDate(d.lastPeriodEndDate) : "Not set"}
+                  </span>
+                  {!d.lastPeriodEndDate && canManage && (
+                    <Button
+                      type="button"
+                      variant="link"
+                      size="sm"
+                      onClick={() => { setCreatingPeriod(false); setModalOpen(true) }}
+                      className="h-auto p-0 text-[11px]"
+                    >
+                      Set end date
+                    </Button>
+                  )}
+                </div>
+              </div>
+            )}
+            {d.cycleId && (
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">Status</span>
+                <span className="text-xs font-medium text-foreground">{d.lastPeriodEndDate ? "Completed" : "Ongoing"}</span>
               </div>
             )}
             {d.lastPeriodDuration !== null && (
@@ -685,6 +724,9 @@ function PeriodStatusCard({
           open={modalOpen}
           onOpenChange={setModalOpen}
           partnerDisplayName={partnerDisplayName}
+          cycleId={creatingPeriod ? null : d.cycleId}
+          initialStartDate={creatingPeriod ? null : d.lastPeriodStartDate}
+          initialEndDate={creatingPeriod ? null : d.lastPeriodEndDate}
           onSuccess={onPeriodUpdated}
         />
       )}
@@ -771,136 +813,6 @@ function CyclePreferencesCard({
         />
       )}
     </>
-  )
-}
-
-function ManagePeriodDialog({
-  open,
-  onOpenChange,
-  partnerDisplayName,
-  onSuccess,
-}: {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  partnerDisplayName?: string
-  onSuccess: () => void
-}) {
-  const todayStr = new Date().toISOString().split("T")[0]
-  const [startDate, setStartDate] = React.useState(todayStr)
-  const [endDate, setEndDate] = React.useState("")
-  const [submitting, setSubmitting] = React.useState(false)
-  const [errorMsg, setErrorMsg] = React.useState<string | null>(null)
-  const [success, setSuccess] = React.useState(false)
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setSubmitting(true)
-    setErrorMsg(null)
-    setSuccess(false)
-
-    try {
-      const res = await recordPartnerPeriodAction({
-        startDate,
-        endDate: endDate ? endDate : null,
-      })
-
-      if (res.ok) {
-        setSuccess(true)
-        setTimeout(() => {
-          onOpenChange(false)
-          onSuccess()
-          setSuccess(false)
-        }, 800)
-      } else {
-        setErrorMsg(res.error || "Failed to log period.")
-      }
-    } catch {
-      setErrorMsg("Network error saving period record.")
-    } finally {
-      setSubmitting(false)
-    }
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-sm rounded-3xl p-6">
-        <DialogHeader className="space-y-1">
-          <DialogTitle className="text-base font-semibold">Log Period for Partner</DialogTitle>
-          <DialogDescription className="text-xs text-muted-foreground">
-            Record period start and optional end date for {partnerDisplayName || "partner"}.
-          </DialogDescription>
-        </DialogHeader>
-
-        {errorMsg && (
-          <div className="flex items-start gap-2 p-2.5 rounded-xl bg-destructive/10 text-destructive text-xs">
-            <AlertCircle className="size-4 shrink-0 mt-0.5" />
-            <span>{errorMsg}</span>
-          </div>
-        )}
-
-        {success ? (
-          <div className="flex items-center justify-center py-6 gap-2 text-emerald-600 dark:text-emerald-400 font-medium text-sm">
-            <Check className="size-4" />
-            <span>Period recorded successfully!</span>
-          </div>
-        ) : (
-          <form onSubmit={handleSubmit} className="space-y-3.5 pt-2">
-            <div className="space-y-1.5">
-              <Label className="text-xs font-medium">Period Start Date</Label>
-              <Input
-                type="date"
-                max={todayStr}
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                required
-                className="h-10 text-xs rounded-xl"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <Label className="text-xs font-medium">Period End Date (Optional)</Label>
-              <Input
-                type="date"
-                max={todayStr}
-                min={startDate}
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                className="h-10 text-xs rounded-xl"
-              />
-              <p className="text-[10px] text-muted-foreground">
-                Leave empty if period is currently ongoing.
-              </p>
-            </div>
-
-            <div className="flex items-center gap-2 pt-2">
-              <Button
-                type="button"
-                variant="outline"
-                disabled={submitting}
-                onClick={() => onOpenChange(false)}
-                className="flex-1 h-10 rounded-xl text-xs cursor-pointer"
-              >
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                disabled={submitting || !startDate}
-                className="flex-1 h-10 rounded-xl text-xs font-semibold cursor-pointer gap-1.5 bg-rose-600 hover:bg-rose-700 text-white"
-              >
-                {submitting ? (
-                  <>
-                    <Loader2 className="size-3.5 animate-spin" />
-                    <span>Saving...</span>
-                  </>
-                ) : (
-                  <span>Save Period</span>
-                )}
-              </Button>
-            </div>
-          </form>
-        )}
-      </DialogContent>
-    </Dialog>
   )
 }
 

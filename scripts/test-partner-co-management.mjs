@@ -494,6 +494,15 @@ async function main() {
     )
 
     const hasPeriodModal = dashFile.includes("ManagePeriodDialog")
+    const periodDialog = fs.readFileSync(path.join(projectRoot, "components", "partner", "manage-period-dialog.tsx"), "utf-8")
+    const periodData = fs.readFileSync(path.join(projectRoot, "lib", "partner", "shared-data.ts"), "utf-8")
+    const periodMutation = fs.readFileSync(path.join(projectRoot, "app", "actions", "partner-mutations.ts"), "utf-8")
+    const exposesExistingPeriodEdit = dashFile.includes('d.cycleId ? "Edit Period"') &&
+      periodDialog.includes("updatePartnerPeriodAction") && periodDialog.includes("initialEndDate")
+    const derivesActualStatus = periodData.includes("lastPeriodEndDate = latestCycle.end_date") &&
+      !periodData.includes("cycle.end_date || sortedDays[sortedDays.length - 1].date")
+    const supportsAuthorizedPeriodUpdate = periodMutation.includes('authorizeSupporterManagement(supabase, "manage_period_status")') &&
+      periodMutation.includes(".eq(\"user_id\", ownerUserId)")
     const hasCyclePrefsModal = dashFile.includes("EditCyclePreferencesDialog")
     const notesEditor = fs.readFileSync(path.join(projectRoot, "components", "notes", "note-editor-dialog.tsx"), "utf-8")
     const hasNotesModal = dashFile.includes("/notes?view=partner") && notesEditor.includes("createPartnerDailyNoteAction")
@@ -504,6 +513,12 @@ async function main() {
       pass("Partner dashboard provides capability-specific co-management modals")
     } else {
       fail("TEST 22: Partner dashboard modals", "Missing co-management modals in dashboard")
+    }
+
+    if (exposesExistingPeriodEdit && derivesActualStatus && supportsAuthorizedPeriodUpdate) {
+      pass("Period Status edit action updates the existing owner period and derives completion from its actual end date")
+    } else {
+      fail("TEST 22: Period status editing", "Existing period edit or actual-date status behavior is missing")
     }
 
     if (hasOwnerAccessSection && hasPrerequisiteEnforcement) {

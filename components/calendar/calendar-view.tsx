@@ -24,6 +24,8 @@ import { getTodayDateString } from "@/lib/calculations/cycle-calculations"
 import { getSeverityLabel } from "@/lib/symptoms/constants"
 import { SymptomLogDialog } from "@/components/symptoms/symptom-log-dialog"
 import { NoteEditorDialog } from "@/components/notes/note-editor-dialog"
+import { PeriodLogDialog } from "@/components/cycles/period-log-dialog"
+import { useAppRouter } from "@/components/navigation/use-app-router"
 import {
   ChevronLeft,
   ChevronRight,
@@ -58,6 +60,7 @@ export function CalendarView({
   partnerDisplayName,
 }: CalendarViewProps) {
   const { userId } = useUserProfile()
+  const router = useAppRouter()
   const todayStr = React.useMemo(() => getTodayDateString(), [])
   const [selectedDateStr, setSelectedDateStr] = React.useState<string>(
     initialDate || todayStr
@@ -126,6 +129,7 @@ export function CalendarView({
 
   // Symptom log dialog for calendar "Add Symptom" action
   const [symptomLogOpen, setSymptomLogOpen] = React.useState(false)
+  const [periodEditOpen, setPeriodEditOpen] = React.useState(false)
 
   // Build set of dates that have daily note records for the note dot indicator
   const noteDateSet = React.useMemo(() => {
@@ -510,6 +514,13 @@ export function CalendarView({
                   </span>
                 </div>
               )}
+              {!isPartnerView && selectedContext.cycle && (
+                <div className="pt-1">
+                  <Button type="button" variant="outline" size="sm" onClick={() => setPeriodEditOpen(true)} className="h-8 text-xs">
+                    Edit Period
+                  </Button>
+                </div>
+              )}
             </div>
           )}
 
@@ -703,6 +714,12 @@ export function CalendarView({
         defaultDate={selectedDateStr}
         existingNotes={notes}
         onSuccess={() => { /* router.refresh() handled via revalidatePath server-side */ }}
+      />
+      <PeriodLogDialog
+        open={periodEditOpen}
+        onOpenChange={setPeriodEditOpen}
+        cycleToEdit={selectedContext.cycle}
+        onSuccess={() => router.refresh()}
       />
     </div>
   )
