@@ -1,5 +1,7 @@
 "use client"
 
+import { getSymptomValues } from "@/lib/symptoms/constants"
+
 import * as React from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
@@ -127,7 +129,7 @@ export function SymptomHistory({ symptoms }: SymptomHistoryProps) {
 
                     {/* Info */}
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-foreground truncate">{s.symptom}</p>
+                      <p className="text-sm font-semibold text-foreground truncate">{getSymptomValues(s).join(", ")}</p>
                       <div className="flex items-center gap-1.5 mt-0.5">
                         <Badge
                           variant={severityBadgeVariant(s.severity)}
@@ -150,7 +152,7 @@ export function SymptomHistory({ symptoms }: SymptomHistoryProps) {
                         type="button"
                         variant="ghost"
                         size="icon-sm"
-                        aria-label={`Edit ${s.symptom}`}
+                        aria-label={`Edit ${getSymptomValues(s).join(", ")}`}
                         onClick={() => { setEditTarget(s); setLogOpen(true) }}
                         className="text-muted-foreground hover:text-primary"
                       >
@@ -160,7 +162,7 @@ export function SymptomHistory({ symptoms }: SymptomHistoryProps) {
                         type="button"
                         variant="ghost"
                         size="icon-sm"
-                        aria-label={`Delete ${s.symptom}`}
+                        aria-label={`Delete ${getSymptomValues(s).join(", ")}`}
                         onClick={() => setDeleteTarget(s)}
                         className="text-muted-foreground hover:text-destructive"
                       >
@@ -189,7 +191,7 @@ export function SymptomHistory({ symptoms }: SymptomHistoryProps) {
           open={Boolean(deleteTarget)}
           onOpenChange={(open) => { if (!open) setDeleteTarget(null) }}
           symptomId={deleteTarget.id}
-          symptomName={deleteTarget.symptom}
+          symptomName={getSymptomValues(deleteTarget).join(", ")}
           symptomSeverity={deleteTarget.severity}
           onSuccess={handleSuccess}
         />

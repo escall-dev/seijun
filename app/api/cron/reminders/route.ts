@@ -12,6 +12,7 @@
 
 import { NextResponse } from "next/server"
 import crypto from "crypto"
+import { deliverNoteNotifications } from "@/lib/server/note-notifications"
 import { processPendingNotificationEvents } from "@/lib/reminders/processor"
 
 export const dynamic = "force-dynamic"
@@ -69,6 +70,7 @@ async function handleCronRequest(request: Request) {
     return NextResponse.json({ error: auth.error }, { status: auth.status })
   }
 
+  await deliverNoteNotifications()
   const summary = await processPendingNotificationEvents()
   return NextResponse.json({ ok: true, timestamp: new Date().toISOString(), summary })
 }

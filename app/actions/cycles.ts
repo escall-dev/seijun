@@ -2,6 +2,7 @@
 
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server"
 import { getServerUserProfile } from "@/lib/server/profile"
+import { calculateDaysBetween, calculateInclusiveDays, getRecordedCycleEnd, getTodayDateString } from "@/lib/calculations/cycle-calculations"
 import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
 
@@ -20,6 +21,7 @@ export interface CycleRecord {
   id: string
   user_id: string
   start_date: string // YYYY-MM-DD
+  cycle_end_date?: string | null
   end_date: string | null
   cycle_length: number | null
   period_duration: number | null
@@ -34,27 +36,6 @@ export interface CycleActionResult {
   success?: boolean
   error?: string
   cycleId?: string
-}
-
-/**
- * Helper: Calculate inclusive days between two YYYY-MM-DD date strings
- */
-function calculateInclusiveDays(startStr: string, endStr: string): number {
-  const start = new Date(startStr + "T00:00:00")
-  const end = new Date(endStr + "T00:00:00")
-  const diffTime = end.getTime() - start.getTime()
-  const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24))
-  return diffDays + 1
-}
-
-/**
- * Helper: Calculate days between consecutive cycle start dates (cycle length)
- */
-function calculateDaysBetween(earlierStr: string, laterStr: string): number {
-  const earlier = new Date(earlierStr + "T00:00:00")
-  const later = new Date(laterStr + "T00:00:00")
-  const diffTime = later.getTime() - earlier.getTime()
-  return Math.round(diffTime / (1000 * 60 * 60 * 24))
 }
 
 /**
@@ -94,8 +75,8 @@ export async function syncCycleLengthsForUser(
 
     for (let i = 0; i < cycles.length; i++) {
       let expectedLength: number | null = null
-      if (i > 0) {
-        const days = calculateDaysBetween(cycles[i - 1].start_date, cycles[i].start_date)
+      if (i < cycles.length - 1) {
+        const days = calculateDaysBetween(cycles[i].start_date, cycles[i + 1].start_date)
         if (days > 0) {
           expectedLength = days
         }
@@ -252,21 +233,15 @@ export async function getCyclesForUser(
 
   // Compute cycle lengths between consecutive cycle start dates
   const computedCycles: CycleRecord[] = cycles.map((cycle, index) => {
-    let calculatedLength = cycle.cycle_length
-
-    if (index > 0) {
-      const prevCycle = cycles[index - 1]
-      const days = calculateDaysBetween(prevCycle.start_date, cycle.start_date)
-      if (days > 0) {
-        calculatedLength = days
-      }
-    }
+    const nextCycle = cycles[index + 1]
+    const calculatedLength = nextCycle ? calculateDaysBetween(cycle.start_date, nextCycle.start_date) : null
 
     const daysList = daysByCycle.get(cycle.id) || []
 
     return {
       ...cycle,
       cycle_length: calculatedLength,
+      cycle_end_date: getRecordedCycleEnd(cycle, cycles),
       period_days: daysList,
       period_days_count: daysList.length,
     }
@@ -306,8 +281,8 @@ export async function getCycleByIdForUser(
 
   if (error || !cycle) return null
 
-  // Fetch period days and previous cycle in parallel
-  const [periodDaysRes, prevCycleRes] = await Promise.all([
+  // Fetch period days and next recorded cycle in parallel
+  const [periodDaysRes, nextCycleRes] = await Promise.all([
     supabase
       .from("period_days")
       .select("*")
@@ -318,15 +293,15 @@ export async function getCycleByIdForUser(
       .from("cycles")
       .select("start_date")
       .eq("user_id", userId)
-      .lt("start_date", cycle.start_date)
-      .order("start_date", { ascending: false })
+      .gt("start_date", cycle.start_date)
+      .order("start_date", { ascending: true })
       .limit(1)
       .maybeSingle(),
   ])
 
-  let computedCycleLength = cycle.cycle_length
-  if (prevCycleRes.data?.start_date) {
-    const days = calculateDaysBetween(prevCycleRes.data.start_date, cycle.start_date)
+  let computedCycleLength: number | null = null
+  if (nextCycleRes.data?.start_date) {
+    const days = calculateDaysBetween(cycle.start_date, nextCycleRes.data.start_date)
     if (days > 0) {
       computedCycleLength = days
     }
@@ -335,6 +310,7 @@ export async function getCycleByIdForUser(
   return {
     ...cycle,
     cycle_length: computedCycleLength,
+    cycle_end_date: nextCycleRes.data ? getRecordedCycleEnd(cycle, [cycle, { ...cycle, start_date: nextCycleRes.data.start_date }]) : null,
     period_days: (periodDaysRes.data as PeriodDayRecord[]) || [],
     period_days_count: periodDaysRes.data?.length || 0,
   }
@@ -363,7 +339,7 @@ export async function createCycleAction(
   const endDate = (formData.get("endDate") as string)?.trim() || null
   const notes = (formData.get("notes") as string)?.trim() || null
 
-  const todayStr = new Date().toISOString().split("T")[0]
+  const todayStr = getTodayDateString()
 
   // Validate start date
   if (!startDate || !/^\d{4}-\d{2}-\d{2}$/.test(startDate)) {
@@ -481,7 +457,7 @@ export async function updateCycleAction(
   const endDate = (formData.get("endDate") as string)?.trim() || null
   const notes = (formData.get("notes") as string)?.trim() || null
 
-  const todayStr = new Date().toISOString().split("T")[0]
+  const todayStr = getTodayDateString()
 
   if (!startDate || !/^\d{4}-\d{2}-\d{2}$/.test(startDate)) {
     return { success: false, error: "Please select a valid start date." }

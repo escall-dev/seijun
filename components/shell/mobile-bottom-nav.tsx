@@ -35,10 +35,10 @@ export function MobileBottomNav() {
         href: "/notes",
         icon: BookOpen,
       }
-    : NAV_ITEMS[2] // History
-  const settingsItem = NAV_ITEMS[3] // Settings
+    : { label: "Notes", href: "/notes", icon: BookOpen }
+  const settingsItem = NAV_ITEMS.find(item => item.href === "/settings")! // Settings
 
-  const renderNavLink = (item: { label: string; href: string; icon: any }) => {
+  const renderNavLink = (item: { label: string; href: string; icon: import("lucide-react").LucideIcon }) => {
     const Icon = item.icon
     const isActive =
       mounted &&

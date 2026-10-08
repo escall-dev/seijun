@@ -1,5 +1,7 @@
 "use client"
 
+import { getSymptomValues } from "@/lib/symptoms/constants"
+
 import * as React from "react"
 import Link from "next/link"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
@@ -16,6 +18,8 @@ import {
   WEEK_DAYS,
   type CalendarDayCell,
 } from "@/lib/calculations/calendar-calculations"
+import { canEditNote } from "@/lib/notes/timeline"
+import { useUserProfile } from "@/lib/hooks/use-user-profile"
 import { getTodayDateString } from "@/lib/calculations/cycle-calculations"
 import { getSeverityLabel } from "@/lib/symptoms/constants"
 import { SymptomLogDialog } from "@/components/symptoms/symptom-log-dialog"
@@ -53,6 +57,7 @@ export function CalendarView({
   isPartnerView = false,
   partnerDisplayName,
 }: CalendarViewProps) {
+  const { userId } = useUserProfile()
   const todayStr = React.useMemo(() => getTodayDateString(), [])
   const [selectedDateStr, setSelectedDateStr] = React.useState<string>(
     initialDate || todayStr
@@ -575,9 +580,9 @@ export function CalendarView({
                     <span
                       key={s.id}
                       className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-secondary/80 text-foreground/90 font-medium text-xs border border-border/50"
-                      aria-label={`${s.symptom}: ${getSeverityLabel(s.severity)}`}
+                      aria-label={`${getSymptomValues(s).join(", ")}: ${getSeverityLabel(s.severity)}`}
                     >
-                      {s.symptom}
+                      {getSymptomValues(s).join(", ")}
                       <span className="text-muted-foreground">·</span>
                       <span className="capitalize text-muted-foreground">{getSeverityLabel(s.severity)}</span>
                     </span>
@@ -633,7 +638,7 @@ export function CalendarView({
                             })}
                           </span>
                         )}
-                        {!isPartnerView && (
+                        {!isPartnerView && canEditNote(note, userId ?? undefined) && (
                           <Button
                             type="button"
                             variant="ghost"

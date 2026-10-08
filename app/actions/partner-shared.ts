@@ -169,7 +169,7 @@ export async function getPartnerDashboardFullAction(): Promise<FullPartnerDashbo
     categories.includes("cycle_estimates") ? getSharedCycleEstimates(supabase) : Promise.resolve(null),
     categories.includes("period_status") ? getSharedPeriodStatus(supabase) : Promise.resolve(null),
     categories.includes("cycle_preferences") ? getSharedCyclePreferences(supabase) : Promise.resolve(null),
-    categories.includes("daily_notes") ? getSharedDailyNotes(supabase) : Promise.resolve(null),
+    Promise.resolve(null) // Notes load only on their dedicated route,
   ])
 
   return {

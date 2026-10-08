@@ -106,7 +106,7 @@ export function PeriodInsights({
               </div>
               <div>
                 <h3 className="text-xs sm:text-sm font-semibold text-foreground leading-tight">
-                  Next Period
+                  Next expected period
                 </h3>
                 <p className="text-[10px] sm:text-xs text-muted-foreground hidden sm:block">
                   Estimated date
@@ -125,7 +125,7 @@ export function PeriodInsights({
           {estimatedNextPeriod ? (
             <div className="space-y-1.5">
               <div className="text-sm sm:text-base md:text-lg font-semibold text-foreground leading-snug">
-                {formatDate(estimatedNextPeriod.estimatedStartDate)}
+                {estimatedNextPeriod.windowStartDate && estimatedNextPeriod.windowEndDate ? `${formatDate(estimatedNextPeriod.windowStartDate, false)} – ${formatDate(estimatedNextPeriod.windowEndDate)}` : formatDate(estimatedNextPeriod.estimatedStartDate)}
               </div>
 
               <div className="flex items-center gap-1.5 text-[11px] sm:text-xs text-muted-foreground">
@@ -142,7 +142,7 @@ export function PeriodInsights({
               <p className="text-[10px] sm:text-[11px] text-muted-foreground/80 leading-tight pt-0.5">
                 {estimatedNextPeriod.isFallback
                   ? `Based on typical ${estimatedNextPeriod.cycleLengthUsed}d cycle`
-                  : `Based on average ${estimatedNextPeriod.cycleLengthUsed}d cycle`}
+                  : `Based on historical ${estimatedNextPeriod.cycleLengthUsed}d cycle`}. Dates are estimates, not deadlines.
               </p>
             </div>
           ) : (

@@ -74,7 +74,7 @@ export async function updateSession(request: NextRequest) {
     "/settings",
     "/onboarding",
   ]
-  const isProtectedRoute = protectedRoutes.some(
+  const isProtectedRoute = pathname === "/partner" || protectedRoutes.some(
     (route) => pathname === route || pathname.startsWith(route + "/")
   )
   const isAuthRoute = pathname === "/login" || pathname === "/register"
@@ -97,7 +97,7 @@ export async function updateSession(request: NextRequest) {
     const redirectUrl = request.nextUrl.clone()
     redirectUrl.pathname = "/login"
     if (pathname !== "/dashboard" && pathname !== "/onboarding") {
-      redirectUrl.searchParams.set("redirect", pathname)
+      redirectUrl.searchParams.set("redirect", pathname + request.nextUrl.search)
     }
     const redirectResponse = NextResponse.redirect(redirectUrl)
     supabaseResponse.cookies.getAll().forEach((cookie) => {
@@ -122,7 +122,7 @@ export async function updateSession(request: NextRequest) {
     const redirectUrl = request.nextUrl.clone()
     redirectUrl.pathname = "/login"
     if (pathname !== "/dashboard" && pathname !== "/onboarding" && pathname !== "/") {
-      redirectUrl.searchParams.set("redirect", pathname)
+      redirectUrl.searchParams.set("redirect", pathname + request.nextUrl.search)
     }
     const redirectResponse = NextResponse.redirect(redirectUrl)
     supabaseResponse.cookies.getAll().forEach((cookie) => {

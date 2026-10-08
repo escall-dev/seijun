@@ -15,14 +15,14 @@ import { Avatar } from "@/components/ui/avatar"
 import { useUserProfile } from "@/lib/hooks/use-user-profile"
 import { NotificationBell } from "@/components/notifications/notification-bell"
 import { AddPartnerModal } from "@/components/partner/add-partner-modal"
-import { Plus, User, UserPlus, Droplets, BookOpen, HeartHandshake } from "lucide-react"
+import { Plus, User, UserPlus, Droplets, BookOpen } from "lucide-react"
 
 export function DesktopHeader() {
   const pathname = usePathname()
   const router = useRouter()
   const { openQuickLog, canQuickLog } = useQuickLog()
   const { context } = useCycleContext()
-  const { isPartnerContext, permissions, partnerInfo, usageRole, canSwitchContext } = context
+  const { isPartnerContext, canSwitchContext } = context
   const [addPartnerOpen, setAddPartnerOpen] = React.useState(false)
   const { avatarUrl, displayName } = useUserProfile()
 
@@ -44,7 +44,7 @@ export function DesktopHeader() {
     : NAV_ITEMS[2] // History
   const settingsItem = NAV_ITEMS[3] // Settings
 
-  const renderLink = (item: { label: string; href: string; icon: any }) => {
+  const renderLink = (item: { label: string; href: string; icon: import("lucide-react").LucideIcon }) => {
     const Icon = item.icon
     const isActive =
       pathname === item.href ||
@@ -109,6 +109,7 @@ export function DesktopHeader() {
           )}
 
           {/* 4. History / Partner Notes */}
+          {!isPartnerContext && renderLink({ label: "Notes", href: "/notes", icon: BookOpen })}
           {renderLink(historyItem)}
 
           {/* 5. Settings */}

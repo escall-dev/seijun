@@ -3,10 +3,8 @@ import type { Database } from "@/lib/supabase/types"
 import {
   authorizeSupporterAccess,
   type AuthorizationDenialReason,
-  type SharingCategory,
 } from "./authorization"
 import type { CycleRecord, PeriodDayRecord } from "@/app/actions/cycles"
-import type { DailyNoteRecord } from "@/lib/notes/types"
 
 /**
  * Seijun Phase 19 Batch 3 — Steps 12–14
@@ -120,12 +118,8 @@ export async function getSharedCycleEstimates(
     }
 
     const cycles: CycleRecord[] = cyclesRaw.map((cycle, index) => {
-      let calculatedLength = cycle.cycle_length
-      if (index > 0) {
-        const prevCycle = cyclesRaw[index - 1]
-        const diff = daysBetween(prevCycle.start_date, cycle.start_date)
-        if (diff > 0) calculatedLength = diff
-      }
+      const nextCycle = cyclesRaw[index + 1]
+      const calculatedLength = nextCycle ? daysBetween(cycle.start_date, nextCycle.start_date) : null
       const daysList = daysByCycle.get(cycle.id) || []
       return {
         ...cycle,
@@ -138,7 +132,7 @@ export async function getSharedCycleEstimates(
     }).reverse() // DESC order (most recent first)
 
     // Reuse existing calculation functions
-    const { getCurrentCycle, getCurrentCycleStatus, calculateAverageCycleLength, calculateAveragePeriodDuration, calculateEstimatedNextPeriod, calculateCycleProgress, getTodayDateString } = await import("@/lib/calculations/cycle-calculations")
+    const { getCurrentCycle, getCurrentCycleStatus, calculateAverageCycleLength, calculateAveragePeriodDuration, calculateEstimatedNextPeriod, getTodayDateString } = await import("@/lib/calculations/cycle-calculations")
 
     const todayStr = getTodayDateString()
     const currentCycle = getCurrentCycle(cycles, todayStr)
@@ -161,17 +155,10 @@ export async function getSharedCycleEstimates(
       averageCycleLength: avgCycleLength,
       typicalCycleLength,
       referenceDateStr: todayStr,
+      cycles,
     })
 
-    const expectedCycleLength = avgCycleLength || typicalCycleLength || 28
-    let cycleProgressPercent: number | null = null
-    if (statusInfo.currentDay) {
-      const progress = calculateCycleProgress({
-        currentCycleDay: statusInfo.currentDay,
-        expectedCycleLength,
-      })
-      cycleProgressPercent = progress.progressPercent
-    }
+    const cycleProgressPercent = null // Observed days have no predicted endpoint.
 
     return {
       ok: true,

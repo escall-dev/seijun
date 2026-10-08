@@ -1,6 +1,7 @@
 "use server"
 
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server"
+import { getTodayDateString } from "@/lib/calculations/cycle-calculations"
 import { revalidatePath } from "next/cache"
 import {
   SYMPTOM_OPTIONS,
@@ -92,22 +93,23 @@ export async function createSymptomAction(
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { success: false, error: "You must be signed in to log symptoms." }
 
-  const todayStr = new Date().toISOString().split("T")[0]
+  const todayStr = getTodayDateString()
   const date = (formData.get("date") as string | null)?.trim() ?? ""
-  const symptom = (formData.get("symptom") as string | null)?.trim() ?? ""
+  const symptoms = [...new Set(formData.getAll("symptom").filter((value): value is string => typeof value === "string").map(value => value.trim()))]
+  const symptom = symptoms[0] ?? ""
   const severity = (formData.get("severity") as string | null)?.trim() ?? ""
   const rawNotes = (formData.get("notes") as string | null)?.trim() ?? ""
   const notes = rawNotes.length > 0 ? rawNotes : null
 
   if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return { success: false, error: "A valid date is required." }
   if (date > todayStr) return { success: false, error: "You cannot log a symptom for a future date." }
-  if (!isValidSymptom(symptom)) return { success: false, error: `Invalid symptom. Must be one of: ${SYMPTOM_OPTIONS.join(", ")}.` }
+  if (!symptoms.length || !symptoms.every(isValidSymptom)) return { success: false, error: `Invalid symptom. Must be one of: ${SYMPTOM_OPTIONS.join(", ")}.` }
   if (!isValidSeverity(severity)) return { success: false, error: `Invalid severity. Must be one of: ${SEVERITY_VALUES.join(", ")}.` }
   if (notes && notes.length > NOTES_MAX_LENGTH) return { success: false, error: `Notes must be ${NOTES_MAX_LENGTH} characters or fewer.` }
 
   const { data, error } = await supabase
     .from("symptoms")
-    .insert({ user_id: user.id, date, symptom, severity, notes })
+    .insert({ user_id: user.id, date, symptom, symptoms, severity, notes })
     .select("id")
     .single()
 
@@ -128,22 +130,23 @@ export async function updateSymptomAction(
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { success: false, error: "You must be signed in to edit symptoms." }
 
-  const todayStr = new Date().toISOString().split("T")[0]
+  const todayStr = getTodayDateString()
   const date = (formData.get("date") as string | null)?.trim() ?? ""
-  const symptom = (formData.get("symptom") as string | null)?.trim() ?? ""
+  const symptoms = [...new Set(formData.getAll("symptom").filter((value): value is string => typeof value === "string").map(value => value.trim()))]
+  const symptom = symptoms[0] ?? ""
   const severity = (formData.get("severity") as string | null)?.trim() ?? ""
   const rawNotes = (formData.get("notes") as string | null)?.trim() ?? ""
   const notes = rawNotes.length > 0 ? rawNotes : null
 
   if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return { success: false, error: "A valid date is required." }
   if (date > todayStr) return { success: false, error: "You cannot log a symptom for a future date." }
-  if (!isValidSymptom(symptom)) return { success: false, error: `Invalid symptom. Must be one of: ${SYMPTOM_OPTIONS.join(", ")}.` }
+  if (!symptoms.length || !symptoms.every(isValidSymptom)) return { success: false, error: `Invalid symptom. Must be one of: ${SYMPTOM_OPTIONS.join(", ")}.` }
   if (!isValidSeverity(severity)) return { success: false, error: `Invalid severity. Must be one of: ${SEVERITY_VALUES.join(", ")}.` }
   if (notes && notes.length > NOTES_MAX_LENGTH) return { success: false, error: `Notes must be ${NOTES_MAX_LENGTH} characters or fewer.` }
 
   const { error } = await supabase
     .from("symptoms")
-    .update({ date, symptom, severity, notes })
+    .update({ date, symptom, symptoms, severity, notes })
     .eq("id", id)
     .eq("user_id", user.id)
 

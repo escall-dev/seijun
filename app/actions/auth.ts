@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server"
 import { getSiteUrl } from "@/lib/config/site"
 import { redirect } from "next/navigation"
+import { revalidatePath } from "next/cache"
 import { cookies } from "next/headers"
 
 export interface AuthActionResult {
@@ -71,6 +72,8 @@ export async function loginAction(
     if (data.user) {
       // Set remember-me flag cookie for middleware and subsequent token refreshes
       const cookieStore = await cookies()
+      cookieStore.delete("seijun_cycle_context")
+      revalidatePath("/", "layout")
       // Clean up any stale first-time MPIN setup cookie upon authentication
       cookieStore.delete("seijun-mpin-setup")
 
@@ -288,6 +291,8 @@ export async function logoutAction(): Promise<void> {
     await supabase.auth.signOut()
     const cookieStore = await cookies()
     cookieStore.delete("sb-remember-me")
+    cookieStore.delete("seijun_cycle_context")
+    revalidatePath("/", "layout")
     cookieStore.delete("seijun-mpin-locked")
     cookieStore.delete("seijun-mpin-setup")
   } catch {
@@ -347,6 +352,8 @@ export async function forgotMpinAction(): Promise<void> {
     await supabase.auth.signOut()
     const cookieStore = await cookies()
     cookieStore.delete("sb-remember-me")
+    cookieStore.delete("seijun_cycle_context")
+    revalidatePath("/", "layout")
     cookieStore.delete("seijun-mpin-locked")
     cookieStore.delete("seijun-mpin-setup")
   } catch {
@@ -407,4 +414,3 @@ export async function setUserMpinStatusAction(
     }
   }
 }
-

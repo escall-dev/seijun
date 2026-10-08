@@ -1,3 +1,4 @@
+import { cache } from "react"
 import type { SupabaseClient } from "@supabase/supabase-js"
 import type { Database } from "@/lib/supabase/types"
 import type { PartnerSharingPreferences, AffinityDisplayFormat } from "./types"
@@ -100,7 +101,7 @@ export type AuthorizationResult = AuthorizationSuccess | AuthorizationFailure
  *  - No active partner relationship exists
  *  - Database error occurs
  */
-export async function resolvePartnerContext(
+export const resolvePartnerContext = cache(async function resolvePartnerContext(
   supabase: SupabaseClient<Database>
 ): Promise<AuthorizationResult> {
   try {
@@ -203,7 +204,7 @@ export async function resolvePartnerContext(
       message: "Unexpected authorization error.",
     }
   }
-}
+})
 
 // ─── Category-Level Authorization ────────────────────────────────────────────
 

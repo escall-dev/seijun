@@ -26,7 +26,7 @@ export function CycleStatsSection({
           <CardContent className="p-0 space-y-2">
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <Clock className="size-3.5 text-primary" />
-              <span>Avg Cycle Length</span>
+              <span>Historical Cycle Estimate</span>
             </div>
             {averageCycleLength ? (
               <div>
@@ -34,14 +34,14 @@ export function CycleStatsSection({
                   {averageCycleLength} <span className="text-xs font-normal text-muted-foreground">days</span>
                 </div>
                 <p className="text-[11px] text-muted-foreground pt-0.5">
-                  Calculated from consecutive cycle starts
+                  Typical length from completed cycle intervals
                 </p>
               </div>
             ) : (
               <div>
                 <div className="text-2xl font-bold tracking-tight text-muted-foreground/60">—</div>
                 <p className="text-[11px] text-muted-foreground pt-0.5">
-                  Keep tracking to see your average
+                  Keep tracking to establish a historical estimate
                 </p>
               </div>
             )}

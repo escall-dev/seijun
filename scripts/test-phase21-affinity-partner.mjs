@@ -43,7 +43,7 @@ try {
   const pkgLock = JSON.parse(fs.readFileSync(path.join(rootDir, "package-lock.json"), "utf8"))
   const versionTs = fs.readFileSync(path.join(rootDir, "lib/version.ts"), "utf8")
 
-  assert(pkg.version === "1.20.0" || pkg.version === "1.21.0", `package.json has valid Phase 21 canonical SemVer (got ${pkg.version})`)
+  assert(/^1\.\d+\.\d+$/.test(pkg.version) && Number(pkg.version.split(".")[1]) >= 21, `package.json retains Phase 21 or a later release (got ${pkg.version})`)
   assert(pkgLock.version === pkg.version, `package-lock.json matches package.json (${pkgLock.version})`)
   assert(versionTs.includes("APP_VERSION"), "lib/version.ts defines canonical APP_VERSION")
   assert(versionTs.includes("packageJson.version"), "lib/version.ts dynamically sources from canonical package.json")
@@ -195,7 +195,7 @@ try {
   const cardCode = fs.readFileSync(path.join(rootDir, "components/partner/relationship-context-card.tsx"), "utf8")
 
   assert(dashboardCode.includes("My Space"), "Dashboard explicitly renders 'My Space' semantic demarcation")
-  assert(dashboardCode.includes("Private to you"), "My Space header emphasizes 'Private to you' guarantee")
+  assert(dashboardCode.includes("Personal tracking"), "My Space identifies personal tracking without mislabeling shared notes as private")
   assert(cardCode.includes("Our Space"), "RelationshipContextCard explicitly features 'Our Space' badge")
   assert(cardCode.includes("Together for"), "RelationshipContextCard formats duration as 'Together for ...'")
   assert(cardCode.includes("Connected"), "RelationshipContextCard provides neutral 'Connected' state when no start date set")

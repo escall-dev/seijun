@@ -2,13 +2,17 @@
 
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
+import { after } from "next/server"
 import {
   NOTE_MAX_LENGTH,
   type DailyNoteRecord,
   type DailyNoteActionResult,
 } from "@/lib/notes/types"
-import { getPartnerRelationship } from "@/lib/partner/service"
-import { sendPartnerCoManagementNotification } from "@/lib/partner/notification"
+import { deliverNoteNotifications } from "@/lib/server/note-notifications"
+import { getTodayDateString } from "@/lib/calculations/cycle-calculations"
+import { canEditNote } from "@/lib/notes/timeline"
+import { loadNotesPage } from "@/lib/notes/server"
+import { resolveServerCycleContext } from "@/lib/cycle-context/server"
 
 export type { DailyNoteRecord, DailyNoteActionResult }
 
@@ -122,7 +126,7 @@ export async function createDailyNoteAction(
     return { success: false, error: "You must be signed in to save notes." }
   }
 
-  const todayStr = new Date().toISOString().split("T")[0]
+  const todayStr = getTodayDateString()
   const date = (formData.get("date") as string | null)?.trim() ?? ""
   const rawContent = (formData.get("content") as string | null)?.trim() ?? ""
 
@@ -145,9 +149,12 @@ export async function createDailyNoteAction(
     }
   }
 
+  const requestId = formData.get("request_id")?.toString()
+  if (!requestId || !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requestId)) return { success: false, error: "Invalid note request. Reopen the editor." }
   const { data, error } = await supabase
     .from("daily_notes")
     .insert({
+      request_id: requestId,
       user_id: user.id,
       author_id: user.id,
       date,
@@ -156,52 +163,18 @@ export async function createDailyNoteAction(
     .select("id, created_at")
     .single()
 
+  if (error?.code === "23505") {
+    const { data: existing } = await supabase.from("daily_notes").select("id").eq("author_id", user.id).eq("request_id", requestId).maybeSingle()
+    if (existing) return { success: true, noteId: existing.id }
+  }
   if (error || !data) {
     console.error("[createDailyNoteAction]", error?.message)
     return { success: false, error: "Failed to save note. Please try again." }
   }
 
-  // ── Notify connected partner if active relationship & sharing enabled ──
-  try {
-    const relationship = await getPartnerRelationship(supabase, user.id)
-    if (relationship && relationship.status === "active") {
-      const isOwner = relationship.owner_user_id === user.id
-      const recipientUserId = isOwner
-        ? relationship.supporter_user_id
-        : relationship.owner_user_id
-
-      if (recipientUserId) {
-        const { data: prefs } = await supabase
-          .from("partner_sharing_preferences")
-          .select("daily_notes")
-          .eq("relationship_id", relationship.id)
-          .maybeSingle()
-
-        if (prefs && prefs.daily_notes) {
-          const { data: profile } = await supabase
-            .from("profiles")
-            .select("username")
-            .eq("user_id", user.id)
-            .maybeSingle()
-
-          const actorUsername = profile?.username || "partner"
-
-          await sendPartnerCoManagementNotification({
-            supabase,
-            recipientUserId,
-            actorUsername,
-            category: "partner_daily_notes",
-            title: "New Daily Note",
-            body: `@${actorUsername} added a new daily note.`,
-            url: isOwner ? "/partner" : "/notes",
-          })
-        }
-      }
-    }
-  } catch (notifErr) {
-    // Non-blocking notification dispatch
-    console.error("[createDailyNoteAction] Partner notification error:", notifErr)
-  }
+  after(async () => {
+    try { await deliverNoteNotifications(data.id) } catch { console.error("[notes] Notification delivery failed; note remains saved.") }
+  })
 
   revalidatePath("/notes")
   revalidatePath("/calendar")
@@ -226,8 +199,10 @@ export async function updateDailyNoteAction(
   if (!user) {
     return { success: false, error: "You must be signed in to edit notes." }
   }
+  const { data: existing } = await supabase.from("daily_notes").select("*").eq("id", id).maybeSingle()
+  if (!existing || !canEditNote(existing, user.id)) return { success: false, error: "Sent partner notes cannot be changed. Add a new note." }
 
-  const todayStr = new Date().toISOString().split("T")[0]
+  const todayStr = getTodayDateString()
   const date = (formData.get("date") as string | null)?.trim() ?? ""
   const rawContent = (formData.get("content") as string | null)?.trim() ?? ""
 
@@ -250,7 +225,7 @@ export async function updateDailyNoteAction(
     }
   }
 
-  const { error } = await supabase
+  const { data: changed, error } = await supabase
     .from("daily_notes")
     .update({
       date,
@@ -259,9 +234,12 @@ export async function updateDailyNoteAction(
     })
     .eq("id", id)
     .eq("user_id", user.id)
+    .is("sent_at", null)
+    .select("id")
+    .maybeSingle()
 
-  if (error) {
-    console.error("[updateDailyNoteAction]", error.message)
+  if (error || !changed) {
+    console.error("[updateDailyNoteAction]", error?.message)
     return { success: false, error: "Failed to update note. Please try again." }
   }
 
@@ -286,15 +264,20 @@ export async function deleteDailyNoteAction(
   if (!user) {
     return { success: false, error: "You must be signed in to delete notes." }
   }
+  const { data: existing } = await supabase.from("daily_notes").select("*").eq("id", id).maybeSingle()
+  if (!existing || !canEditNote(existing, user.id)) return { success: false, error: "Sent partner notes cannot be changed. Add a new note." }
 
-  const { error } = await supabase
+  const { data: changed, error } = await supabase
     .from("daily_notes")
     .delete()
     .eq("id", id)
     .eq("user_id", user.id)
+    .is("sent_at", null)
+    .select("id")
+    .maybeSingle()
 
-  if (error) {
-    console.error("[deleteDailyNoteAction]", error.message)
+  if (error || !changed) {
+    console.error("[deleteDailyNoteAction]", error?.message)
     return { success: false, error: "Failed to delete note. Please try again." }
   }
 
@@ -303,4 +286,14 @@ export async function deleteDailyNoteAction(
   revalidatePath("/dashboard")
   revalidatePath("/partner")
   return { success: true }
+}
+
+export async function getOlderNotesAction(input: { cursor: string; snapshot: string; author: "own" | "partner" | "all"; partnerView: boolean }) {
+  const user = await getAuthenticatedUser()
+  if (!user) throw new Error("Sign in to view notes.")
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.cursor) || !Number.isFinite(Date.parse(input.snapshot))) throw new Error("Invalid page cursor")
+  const supabase = await createClient()
+  const context = await resolveServerCycleContext(supabase, user.id, input.partnerView ? "partner" : undefined)
+  if (input.partnerView && (!context.isPartnerContext || !context.permissions.hasDailyNotes)) throw new Error("Partner notes are not available.")
+  return loadNotesPage(input.partnerView ? context.activeUserId : user.id, input.partnerView ? "all" : input.author, input.cursor, input.snapshot)
 }

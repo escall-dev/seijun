@@ -1,9 +1,11 @@
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server"
 import { getServerUserProfile } from "@/lib/server/profile"
 import { redirect } from "next/navigation"
+import { after } from "next/server"
 import { getCyclesForUser } from "@/app/actions/cycles"
 import { getSymptomsByDateForUser } from "@/app/actions/symptoms"
-import { getDailyNoteByDateForUser } from "@/app/actions/notes"
+import { Suspense } from "react"
+import { CompactCalendar } from "@/components/dashboard/compact-calendar"
 import {
   getCurrentCycle,
   getCurrentCycleStatus,
@@ -17,15 +19,15 @@ import { DashboardHeader } from "@/components/dashboard/dashboard-header"
 import { SupporterBanner } from "@/components/dashboard/supporter-banner"
 import { CurrentCycleCard } from "@/components/dashboard/current-cycle-card"
 import { PeriodInsights } from "@/components/dashboard/period-insights"
-import { CycleStatsSection } from "@/components/dashboard/cycle-stats-section"
 import { DashboardQuickActions } from "@/components/dashboard/dashboard-quick-actions"
-import { RecentCyclesSection } from "@/components/dashboard/recent-cycles-section"
 import { TodaySymptomsCard } from "@/components/dashboard/today-symptoms-card"
-import { TodayNoteCard } from "@/components/dashboard/today-note-card"
+import { HomeNotesCard } from "@/components/dashboard/home-notes-card"
+import { Skeleton } from "@/components/ui/skeleton"
 import { NotificationPermissionPrompt } from "@/components/notifications/notification-permission-prompt"
 import { resolveServerCycleContext } from "@/lib/cycle-context/server"
 import { CycleContextSwitcher } from "@/components/cycle-context/cycle-context-switcher"
 import { PartnerDashboardView } from "@/components/partner/partner-dashboard-view"
+import { getPartnerDashboardFullAction } from "@/app/actions/partner-shared"
 import { RelationshipContextCard } from "@/components/partner/relationship-context-card"
 
 export const dynamic = "force-dynamic"
@@ -58,18 +60,19 @@ export default async function DashboardPage() {
   const displayName = profile?.display_name || user.user_metadata?.display_name || "Friend"
 
   // Opportunistic evaluation of pending due reminders in the background
-  try {
-    const { processPendingNotificationEvents } = await import("@/lib/reminders/processor")
-    void processPendingNotificationEvents({ userId: user.id })
-  } catch {
-    // Non-blocking
-  }
+  after(async () => {
+    try {
+      const { processPendingNotificationEvents } = await import("@/lib/reminders/processor")
+      await processPendingNotificationEvents({ userId: user.id })
+    } catch { /* Non-blocking */ }
+  })
 
   // ─── PARTNER CYCLE CONTEXT (Supporter Mode or Both-Role Partner Context) ───────
   if (cycleContext.isPartnerContext) {
     if (cycleContext.partnerInfo.hasActivePartner) {
       // Naturally present the connected Partner's cycle experience
-      return <PartnerDashboardView isPrimaryDashboard={true} />
+      const initialData = await getPartnerDashboardFullAction()
+      return <PartnerDashboardView isPrimaryDashboard={true} initialData={initialData} />
     }
 
     // Supporter account without active partner connection yet:
@@ -87,11 +90,7 @@ export default async function DashboardPage() {
   const typicalCycleLength = profile?.typical_cycle_length ?? 28
   const onboardingStartDate = profile?.last_period_start ?? null
 
-  const [cycles, todaySymptoms, todayNote] = await Promise.all([
-    getCyclesForUser(user.id, supabase),
-    getSymptomsByDateForUser(user.id, todayStr, supabase),
-    getDailyNoteByDateForUser(user.id, todayStr, supabase),
-  ])
+  const cycles = await getCyclesForUser(user.id, supabase)
 
   // A. Current Cycle & Status
   const currentCycle = getCurrentCycle(cycles, todayStr)
@@ -110,6 +109,7 @@ export default async function DashboardPage() {
     averageCycleLength: avgCycleLength,
     typicalCycleLength,
     referenceDateStr: todayStr,
+    cycles,
   })
 
   return (
@@ -123,6 +123,61 @@ export default async function DashboardPage() {
         partnerDisplayName={cycleContext.partnerInfo.displayName}
         hasActivePartner={cycleContext.partnerInfo.hasActivePartner}
       />
+
+      {/* Explanatory Notification Permission Prompt */}
+      <NotificationPermissionPrompt usageRole={profile?.usage_role} />
+
+      {/* ─── MY SPACE (Personal Cycle Tracking & Private Journal) ─── */}
+      {cycleContext.partnerInfo.hasActivePartner && (
+        <div className="flex items-center justify-between pt-1 px-1 select-none">
+          <div className="flex items-center gap-2">
+            <h2 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+              My Space
+            </h2>
+            <span className="text-[10px] text-muted-foreground/80 bg-secondary/60 px-2 py-0.5 rounded-full border border-border/50">
+              Personal tracking
+            </span>
+          </div>
+          <span className="text-[11px] text-muted-foreground/80 hidden sm:inline">
+            Personal cycle logs &amp; journal
+          </span>
+        </div>
+      )}
+
+      {/* Current Cycle Card with Progress Visualizer & Predictions */}
+      <CurrentCycleCard
+        currentCycle={currentCycle}
+        statusInfo={statusInfo}
+        expectedCycleLength={expectedCycleLength}
+        expectedNoLaterThanDate={
+          estimatedNextPeriod?.windowEndDate || estimatedNextPeriod?.estimatedStartDate || null
+        }
+      />
+
+      {/* Direct Calendar Placement on Home */}
+      <CompactCalendar cycles={cycles} todayStr={todayStr} prediction={estimatedNextPeriod} />
+
+      {/* Quick Actions (Log Period dialog, Calendar, Cycles) */}
+      <DashboardQuickActions />
+
+      {/* Dedicated Daily Notes Entry */}
+      <HomeNotesCard
+        todayStr={todayStr}
+        hasActivePartner={cycleContext.partnerInfo.hasActivePartner}
+        partnerDisplayName={cycleContext.partnerInfo.displayName}
+      />
+
+      {/* Period Insights: Last Period & Next Expected Period */}
+      <PeriodInsights
+        latestPeriod={latestPeriod}
+        estimatedNextPeriod={estimatedNextPeriod}
+        onboardingStartDate={onboardingStartDate}
+      />
+
+      {/* Daily Observations: Today's Symptoms */}
+      <Suspense fallback={<Skeleton className="h-40 rounded-2xl" />}>
+        <DailySymptoms userId={user.id} todayStr={todayStr} />
+      </Suspense>
 
       {/* Our Space Relationship Context Card when connected with an active partner */}
       {cycleContext.partnerInfo.hasActivePartner && (
@@ -140,62 +195,11 @@ export default async function DashboardPage() {
           isCoManagementActive={cycleContext.permissions.managementPermissions.length > 0}
         />
       )}
-
-      {/* Explanatory Notification Permission Prompt */}
-      <NotificationPermissionPrompt usageRole={profile?.usage_role} />
-
-      {/* ─── MY SPACE (Personal Cycle Tracking & Private Journal) ─── */}
-      {cycleContext.partnerInfo.hasActivePartner && (
-        <div className="flex items-center justify-between pt-1 px-1 select-none">
-          <div className="flex items-center gap-2">
-            <h2 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-              My Space
-            </h2>
-            <span className="text-[10px] text-muted-foreground/80 bg-secondary/60 px-2 py-0.5 rounded-full border border-border/50">
-              Private to you
-            </span>
-          </div>
-          <span className="text-[11px] text-muted-foreground/80 hidden sm:inline">
-            Personal cycle logs &amp; journal
-          </span>
-        </div>
-      )}
-
-      {/* Current Cycle Card with Progress Visualizer */}
-      <CurrentCycleCard
-        currentCycle={currentCycle}
-        statusInfo={statusInfo}
-        expectedCycleLength={expectedCycleLength}
-      />
-
-      {/* Period Insights: Last Period & Next Expected Period */}
-      <PeriodInsights
-        latestPeriod={latestPeriod}
-        estimatedNextPeriod={estimatedNextPeriod}
-        onboardingStartDate={onboardingStartDate}
-      />
-
-      {/* Quick Actions (Log Period dialog, Calendar, Cycles) */}
-      <DashboardQuickActions />
-
-      {/* Daily Observations: Today's Symptoms & Today's Daily Note */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <TodaySymptomsCard todaySymptoms={todaySymptoms} todayStr={todayStr} />
-        <TodayNoteCard todayNote={todayNote} todayStr={todayStr} />
-      </div>
-
-      {/* Cycle Summary Statistics */}
-      <CycleStatsSection
-        averageCycleLength={avgCycleLength}
-        averagePeriodDuration={avgPeriodDuration}
-        cyclesCount={cycles.length}
-      />
-
-      {/* Recent Cycle History */}
-      <RecentCyclesSection
-        cycles={cycles}
-        currentCycleId={currentCycle?.id}
-      />
     </div>
   )
+}
+
+async function DailySymptoms({ userId, todayStr }: { userId: string; todayStr: string }) {
+  const symptoms = await getSymptomsByDateForUser(userId, todayStr)
+  return <TodaySymptomsCard todaySymptoms={symptoms} todayStr={todayStr} />
 }

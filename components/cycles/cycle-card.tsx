@@ -35,11 +35,11 @@ function getFlowColorClass(flow: FlowLevel): string {
 }
 
 export function CycleCard({ cycle, isCurrent }: CycleCardProps) {
-  const isOngoing = !cycle.end_date
+  const isOngoing = !cycle.cycle_end_date
 
   const dateRangeDisplay = isOngoing
     ? `${formatDate(cycle.start_date)} (Ongoing)`
-    : `${formatDate(cycle.start_date)} – ${formatDate(cycle.end_date!)}`
+    : `${formatDate(cycle.start_date)} – ${formatDate(cycle.cycle_end_date!)}`
 
   return (
     <Link href={`/cycles/${cycle.id}`} className="group block select-none">

@@ -13,7 +13,7 @@ export interface CreateClientOptions {
  * Creates a Supabase client for use in Server Components, Server Actions,
  * and Route Handlers using Next.js App Router cookie store.
  */
-export async function createClient(customOptions?: CreateClientOptions) {
+export const createClient = cache(async (customOptions?: CreateClientOptions) => {
   const { url, key } = assertSupabaseConfigured()
   const cookieStore = await cookies()
 
@@ -45,7 +45,7 @@ export async function createClient(customOptions?: CreateClientOptions) {
       },
     },
   })
-}
+})
 
 /**
  * Safe getter that returns null if Supabase credentials are not configured yet,

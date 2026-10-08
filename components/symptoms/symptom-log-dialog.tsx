@@ -19,10 +19,12 @@ import {
   type SymptomActionResult,
 } from "@/app/actions/symptoms"
 import {
+  getSymptomValues,
   SYMPTOM_OPTIONS,
   SEVERITY_OPTIONS,
   getSeverityLabel,
 } from "@/lib/symptoms/constants"
+import { getTodayDateString } from "@/lib/calculations/cycle-calculations"
 import { Activity, AlertCircle, Loader2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -58,10 +60,10 @@ const severityStyles: Record<string, { active: string; ring: string }> = {
 
 function SymptomLogForm({ symptomToEdit, defaultDate, onClose, onSuccess }: SymptomLogFormProps) {
   const isEditing = Boolean(symptomToEdit)
-  const todayStr = new Date().toISOString().split("T")[0]
+  const todayStr = getTodayDateString()
 
   const [date, setDate] = React.useState(symptomToEdit?.date ?? defaultDate ?? todayStr)
-  const [symptom, setSymptom] = React.useState(symptomToEdit?.symptom ?? "")
+  const [symptoms, setSymptoms] = React.useState<string[]>(symptomToEdit ? getSymptomValues(symptomToEdit) : [])
   const [severity, setSeverity] = React.useState(symptomToEdit?.severity ?? "")
   const [notes, setNotes] = React.useState(symptomToEdit?.notes ?? "")
   const [error, setError] = React.useState<string | null>(null)
@@ -73,13 +75,13 @@ function SymptomLogForm({ symptomToEdit, defaultDate, onClose, onSuccess }: Symp
 
     if (!date) { setError("Please select a date."); return }
     if (date > todayStr) { setError("You cannot log a symptom for a future date."); return }
-    if (!symptom) { setError("Please select a symptom."); return }
+    if (!symptoms.length) { setError("Please select a symptom."); return }
     if (!severity) { setError("Please select a severity level."); return }
     if (notes.length > 500) { setError("Notes must be 500 characters or fewer."); return }
 
     const formData = new FormData()
     formData.append("date", date)
-    formData.append("symptom", symptom)
+    symptoms.forEach(value => formData.append("symptom", value))
     formData.append("severity", severity)
     if (notes.trim()) formData.append("notes", notes.trim())
 
@@ -132,22 +134,22 @@ function SymptomLogForm({ symptomToEdit, defaultDate, onClose, onSuccess }: Symp
 
       {/* Symptom selector */}
       <div className="space-y-2">
-        <Label>Symptom *</Label>
+        <Label>Symptoms *</Label>
         <div
-          role="radiogroup"
-          aria-label="Select symptom"
+          role="group"
+          aria-label="Select symptoms"
           className="grid grid-cols-2 gap-2"
         >
           {SYMPTOM_OPTIONS.map((opt) => {
-            const isSelected = symptom === opt
+            const isSelected = symptoms.includes(opt)
             return (
               <button
                 key={opt}
                 type="button"
-                role="radio"
+                role="checkbox"
                 aria-checked={isSelected}
                 disabled={isPending}
-                onClick={() => setSymptom(opt)}
+                onClick={() => setSymptoms(previous => previous.includes(opt) ? previous.filter(value => value !== opt) : [...previous, opt])}
                 className={cn(
                   "flex min-h-[44px] items-center justify-start px-3 py-2 rounded-xl border text-sm font-medium transition-all select-none text-left",
                   isSelected
@@ -223,7 +225,7 @@ function SymptomLogForm({ symptomToEdit, defaultDate, onClose, onSuccess }: Symp
         <Button type="button" variant="outline" onClick={onClose} disabled={isPending}>
           Cancel
         </Button>
-        <Button type="submit" disabled={isPending || !symptom || !severity || !date}>
+        <Button type="submit" disabled={isPending || !symptoms.length || !severity || !date}>
           {isPending ? (
             <>
               <Loader2 className="size-4 animate-spin mr-2" />

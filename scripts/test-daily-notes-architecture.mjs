@@ -228,7 +228,7 @@ async function main() {
     }
 
     // Check that partner notification is dispatched
-    if (notesActions.includes("sendPartnerCoManagementNotification") && notesActions.includes("partner_daily_notes")) {
+    if (notesActions.includes("deliverNoteNotifications") && notesActions.includes("after(async")) {
       pass("createDailyNoteAction sends partner notification when relationship is active")
     } else {
       fail("Partner notification", "Missing notification dispatch in createDailyNoteAction")
@@ -298,14 +298,14 @@ async function main() {
     const partnerDashboardPath = path.join(projectRoot, "components", "partner", "partner-dashboard-view.tsx")
     const partnerDashboardContent = fs.readFileSync(partnerDashboardPath, "utf-8")
 
-    if (partnerDashboardContent.includes("note.createdAt") && partnerDashboardContent.includes("toLocaleTimeString")) {
-      pass("Partner Dashboard daily notes card displays note timestamps")
+    if (partnerDashboardContent.includes('/notes?view=partner') && historyContent.includes("formatPostingTime") && historyContent.includes('timeZone: "Asia/Manila"')) {
+      pass("Partner Dashboard opens the dedicated Notes timeline with exact local timestamps")
     } else {
       fail("Partner Dashboard timestamps", "Missing timestamp in partner dashboard notes card")
     }
 
-    if (partnerDashboardContent.includes("key={note.id}") && partnerDashboardContent.includes("noteId: note.id")) {
-      pass("Partner Dashboard daily notes operations target unique noteId rather than date")
+    if (partnerDashboardContent.includes('/notes?view=partner') && historyContent.includes("key={note.id}") && historyContent.includes("canEditNote")) {
+      pass("Partner Notes use unique note IDs and sent-version edit protection")
     } else {
       fail("Partner Dashboard noteId", "Still targeting notes by date instead of noteId")
     }

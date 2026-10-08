@@ -21,6 +21,7 @@ import {
   createPartnerDailyNoteAction,
   updatePartnerDailyNoteAction,
 } from "@/app/actions/partner-mutations"
+import { getTodayDateString } from "@/lib/calculations/cycle-calculations"
 import { NOTE_MAX_LENGTH } from "@/lib/notes/types"
 import { FileText, AlertCircle, Loader2 } from "lucide-react"
 
@@ -53,8 +54,9 @@ function NoteEditorForm({
   onClose,
   onSuccess,
 }: NoteEditorFormProps) {
+  const [requestId] = React.useState(() => crypto.randomUUID())
   const isEditing = Boolean(noteToEdit)
-  const todayStr = React.useMemo(() => new Date().toISOString().split("T")[0], [])
+  const todayStr = React.useMemo(() => getTodayDateString(), [])
 
   const [date, setDate] = React.useState(
     noteToEdit?.date || defaultDate || todayStr
@@ -107,6 +109,7 @@ function NoteEditorForm({
           }
         } else {
           const res = await createPartnerDailyNoteAction({
+            requestId,
             date,
             content: trimmed,
           })
@@ -119,6 +122,7 @@ function NoteEditorForm({
         }
       } else {
         const formData = new FormData()
+        formData.append("request_id", requestId)
         formData.append("date", date)
         formData.append("content", trimmed)
 
@@ -244,7 +248,7 @@ export function NoteEditorDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-md max-h-[90dvh] overflow-y-auto">
         <DialogHeader>
           <div className="flex items-center gap-2.5">
             <div className="flex size-9 items-center justify-center rounded-xl bg-lavender text-primary border border-lavender-border/70 shrink-0">
@@ -257,7 +261,7 @@ export function NoteEditorDialog({
               <DialogDescription className="text-xs">
                 {isPartnerContext
                   ? `Notes for ${partnerDisplayName || "partner"}'s cycle.`
-                  : "Private personal reflections for this date."}
+                  : "Notes follow your sharing settings. Sent versions cannot be changed."}
               </DialogDescription>
             </div>
           </div>

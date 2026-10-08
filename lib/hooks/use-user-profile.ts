@@ -14,14 +14,15 @@ const UserProfileContext = React.createContext<UserProfileState | null>(null)
 
 export interface UserProfileProviderProps {
   children: React.ReactNode
+  initialState?: UserProfileState
 }
 
 /**
  * Shell-level provider that resolves user profile once and shares state across
  * DesktopHeader, MobileHeader, MobileBottomNav, and child page components.
  */
-export function UserProfileProvider({ children }: UserProfileProviderProps) {
-  const [state, setState] = React.useState<UserProfileState>({
+export function UserProfileProvider({ children, initialState }: UserProfileProviderProps) {
+  const [state, setState] = React.useState<UserProfileState>(initialState ?? {
     userId: null,
     displayName: null,
     avatarUrl: null,
@@ -32,25 +33,30 @@ export function UserProfileProvider({ children }: UserProfileProviderProps) {
     let isMounted = true
     const supabase = createClient()
 
+    let generation = 0
+    let activeUserId = initialState?.userId ?? null
     async function fetchProfile() {
+      const currentGeneration = ++generation
       try {
         const {
           data: { user },
         } = await supabase.auth.getUser()
 
         if (!user) {
-          if (isMounted) {
+          if (isMounted && currentGeneration === generation) {
             setState({ userId: null, displayName: null, avatarUrl: null, isLoading: false })
           }
           return
         }
 
+        if (currentGeneration !== generation) return
+        activeUserId = user.id
         // Fast metadata initial state
         const metaName = user.user_metadata?.display_name || null
         const rawMetaAvatar = user.user_metadata?.avatar_url || null
         const cleanMetaAvatar = rawMetaAvatar && !rawMetaAvatar.startsWith("preset:") ? rawMetaAvatar : null
 
-        if (isMounted) {
+        if (isMounted && currentGeneration === generation) {
           setState({
             userId: user.id,
             displayName: metaName,
@@ -66,7 +72,7 @@ export function UserProfileProvider({ children }: UserProfileProviderProps) {
           .eq("user_id", user.id)
           .single()
 
-        if (isMounted && profile) {
+        if (isMounted && currentGeneration === generation && profile) {
           const rawDbAvatar = profile.avatar_url || cleanMetaAvatar
           const cleanAvatar = rawDbAvatar && !rawDbAvatar.startsWith("preset:") ? rawDbAvatar : null
 
@@ -78,17 +84,24 @@ export function UserProfileProvider({ children }: UserProfileProviderProps) {
           })
         }
       } catch {
-        if (isMounted) {
+        if (isMounted && currentGeneration === generation) {
           setState((prev) => ({ ...prev, isLoading: false }))
         }
       }
     }
 
-    fetchProfile()
+    if (!initialState) void fetchProfile()
 
     // Listen for auth state change
-    const { data: authListener } = supabase.auth.onAuthStateChange(() => {
-      fetchProfile()
+    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
+      const nextId = session?.user.id ?? null
+      if (nextId !== activeUserId) {
+        activeUserId = nextId
+        generation++
+        setState({ userId: nextId, displayName: null, avatarUrl: null, isLoading: Boolean(nextId) })
+        // Leave auth callback before calling auth APIs (avoids auth lock contention).
+        setTimeout(() => void fetchProfile(), 0)
+      } else if (event === "USER_UPDATED") setTimeout(() => void fetchProfile(), 0)
     })
 
     // Listen for instant local profile updates
@@ -114,7 +127,7 @@ export function UserProfileProvider({ children }: UserProfileProviderProps) {
       authListener?.subscription.unsubscribe()
       window.removeEventListener("seijun:profile-updated", handleProfileUpdate)
     }
-  }, [])
+  }, [initialState])
 
   return React.createElement(UserProfileContext.Provider, { value: state }, children)
 }

@@ -765,7 +765,7 @@ async function main() {
     )
 
     // Check for key UI states
-    if (viewContent.includes("No Partner Connection")) {
+    if (viewContent.includes("No Partner Connected Yet")) {
       pass("Dashboard has no-partner state")
     } else {
       fail("Dashboard no-partner state", "Not found")

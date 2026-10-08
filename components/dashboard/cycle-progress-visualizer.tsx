@@ -1,106 +1,109 @@
 import * as React from "react"
-import { Droplet } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { Sparkles } from "lucide-react"
 
 interface CycleProgressVisualizerProps {
   currentDay: number
   expectedTotalDays: number
+  expectedNoLaterThanDate?: string | null
   periodDaysCount?: number
   isOnPeriod?: boolean
   className?: string
 }
 
+function formatDisplayDate(dateStr?: string | null): string | null {
+  if (!dateStr) return null
+  const [y, m, d] = dateStr.split("-").map(Number)
+  if (!y || !m || !d) return null
+  const date = new Date(y, m - 1, d)
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+  })
+}
+
 export function CycleProgressVisualizer({
   currentDay,
   expectedTotalDays,
+  expectedNoLaterThanDate,
   periodDaysCount = 0,
   isOnPeriod = false,
   className,
 }: CycleProgressVisualizerProps) {
-  const safeTotal = Math.max(1, expectedTotalDays)
-  const clampedDay = Math.max(1, currentDay)
-  const progressPercent = Math.min(100, Math.max(0, Math.round((clampedDay / safeTotal) * 100)))
-
-  // Period portion percentage if period days are known
-  const periodDaysPercent = periodDaysCount > 0
-    ? Math.min(100, Math.round((periodDaysCount / safeTotal) * 100))
-    : 0
-
-  // Position for the glowing thumb indicator, safely clamped to avoid edge clipping
-  const indicatorPosition = Math.min(98, Math.max(2, progressPercent))
+  const day = Math.max(1, currentDay)
+  const isExtended = day > expectedTotalDays
+  const percentage = Math.min(100, Math.round((day / expectedTotalDays) * 100))
+  const formattedNoLaterThan = formatDisplayDate(expectedNoLaterThanDate)
 
   return (
     <div
-      className={cn("w-full space-y-3 relative", className)}
-      role="progressbar"
-      aria-valuenow={progressPercent}
-      aria-valuemin={0}
-      aria-valuemax={100}
-      aria-valuetext={`Cycle day ${clampedDay} of ${safeTotal} days, ${progressPercent}% through cycle`}
+      className={cn("space-y-3.5 text-sm w-full max-w-md mx-auto", className)}
+      aria-label={`Cycle progress: Day ${day}, expected length ${expectedTotalDays} days`}
     >
-      {/* Progress Track Layer */}
-      <div className="relative w-full py-1">
-        {/* Track Background */}
-        <div className="relative h-2.5 sm:h-3 w-full rounded-full bg-secondary/80 dark:bg-secondary/40 overflow-hidden border border-border/50">
-          {/* Period Days Zone (if period days are recorded) */}
-          {periodDaysPercent > 0 && (
-            <div
-              className="absolute top-0 bottom-0 left-0 bg-primary/25 border-r border-primary/40 z-0 transition-all duration-300"
-              style={{ width: `${periodDaysPercent}%` }}
-              title={`${periodDaysCount} period days logged`}
-            />
-          )}
-
-          {/* Main Cycle Progress Fill */}
+      {/* Visual Progress Bar */}
+      <div className="space-y-1.5">
+        <div className="relative h-2.5 w-full bg-secondary/80 dark:bg-secondary/40 rounded-full overflow-hidden p-0.5 border border-border/40">
           <div
             className={cn(
-              "h-full rounded-full transition-all duration-500 relative z-10",
-              isOnPeriod
-                ? "bg-gradient-to-r from-primary via-primary to-primary/90"
-                : "bg-gradient-to-r from-primary via-primary/90 to-pink-accent-foreground"
+              "h-full rounded-full transition-all duration-500",
+              isExtended
+                ? "bg-gradient-to-r from-primary to-lavender-foreground animate-pulse"
+                : "bg-primary"
             )}
-            style={{ width: `${progressPercent}%` }}
+            style={{ width: `${percentage}%` }}
+            role="progressbar"
+            aria-valuenow={day}
+            aria-valuemin={1}
+            aria-valuemax={expectedTotalDays}
           />
         </div>
 
-        {/* Dynamic Current Position Indicator Node */}
-        <div
-          aria-hidden="true"
-          className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 z-30 pointer-events-none transition-all duration-500 ease-out"
-          style={{ left: `${indicatorPosition}%` }}
-        >
-          <div className="relative flex items-center justify-center">
-            {/* Ambient Pulse Halo */}
-            <div className="absolute size-6 rounded-full bg-primary/20 dark:bg-primary/30 animate-pulse" />
-            {/* Glowing Center Bead */}
-            <div className="size-4 sm:size-4.5 rounded-full bg-primary border-2 border-background shadow-md ring-2 ring-primary/30" />
-          </div>
-        </div>
-      </div>
-
-      {/* Track Legend / Markers Row */}
-      <div className="flex items-center justify-between text-xs text-muted-foreground font-medium px-0.5">
-        <span className="flex items-center gap-1">
-          {periodDaysCount > 0 ? (
+        {/* Milestone Labels */}
+        <div className="flex justify-between items-center text-[11px] text-muted-foreground select-none font-medium px-0.5">
+          <span>Day 1 (start)</span>
+          {isExtended ? (
             <span className="inline-flex items-center gap-1 text-primary font-semibold">
-              <Droplet className="size-3 fill-current" />
-              <span>{periodDaysCount}d period</span>
+              <Sparkles className="size-3" />
+              <span>Extended (+{day - expectedTotalDays}d)</span>
             </span>
           ) : (
-            <span>Start (Day 1)</span>
+            <span>Expected ~{expectedTotalDays}d</span>
           )}
-        </span>
+        </div>
+      </div>
 
-        {/* Dynamic Current Position Highlight Badge */}
-        <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-primary/10 dark:bg-primary/20 text-primary text-xs font-semibold shadow-xs">
-          <span>Day {clampedDay}</span>
-          <span className="text-muted-foreground font-normal">· {progressPercent}%</span>
+      {/* Structured Prediction & Observation Information */}
+      <div className="grid grid-cols-2 gap-2 text-left pt-1">
+        <div className="p-2.5 rounded-xl bg-background/60 dark:bg-card/40 border border-border/50">
+          <p className="text-[10px] uppercase font-semibold text-muted-foreground tracking-wider">
+            Expected Cycle
+          </p>
+          <p className="text-xs sm:text-sm font-bold text-foreground mt-0.5">
+            {expectedTotalDays} days
+          </p>
+          <p className="text-[10px] text-muted-foreground leading-tight mt-0.5">
+            Historical expectation
+          </p>
         </div>
 
-        <span className="text-muted-foreground/90">
-          ~Day {safeTotal}
-        </span>
+        <div className="p-2.5 rounded-xl bg-background/60 dark:bg-card/40 border border-border/50">
+          <p className="text-[10px] uppercase font-semibold text-muted-foreground tracking-wider">
+            Expected No Later Than
+          </p>
+          <p className="text-xs sm:text-sm font-bold text-foreground mt-0.5">
+            {formattedNoLaterThan || `~Day ${expectedTotalDays}`}
+          </p>
+          <p className="text-[10px] text-muted-foreground leading-tight mt-0.5">
+            Calculated prediction
+          </p>
+        </div>
       </div>
+
+      {/* Disclaimers & Tracking State */}
+      <p className="text-[11px] text-muted-foreground leading-relaxed text-center px-2">
+        {periodDaysCount > 0 ? `${periodDaysCount} period days logged. ` : ""}
+        Cycle ends when your next period starts.
+      </p>
     </div>
   )
 }

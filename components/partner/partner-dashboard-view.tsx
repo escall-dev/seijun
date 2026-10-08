@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import Link from "next/link"
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -33,31 +34,24 @@ import {
   Clock,
   Plus,
   Edit3,
-  Trash2,
   Check,
   Sparkles,
 } from "lucide-react"
 import {
-  getPartnerDashboardAction,
   getPartnerDashboardFullAction,
   getSharedCycleEstimatesAction,
   getSharedPeriodStatusAction,
   getSharedCyclePreferencesAction,
-  getSharedDailyNotesAction,
   type PartnerDashboardData,
   type SharedCycleEstimateResult,
   type SharedPeriodStatusResult,
   type SharedCyclePreferencesResult,
-  type SharedDailyNotesResult,
+  type FullPartnerDashboardResult,
 } from "@/app/actions/partner-shared"
 import {
   recordPartnerPeriodAction,
   updatePartnerCyclePreferencesAction,
-  createPartnerDailyNoteAction,
-  updatePartnerDailyNoteAction,
-  deletePartnerDailyNoteAction,
 } from "@/app/actions/partner-mutations"
-import type { SharedDailyNote } from "@/lib/partner/shared-data"
 import { useAppRouter } from "@/components/navigation/use-app-router"
 import { CycleContextSwitcher } from "@/components/cycle-context/cycle-context-switcher"
 import { AffinityCard } from "@/components/partner/affinity-card"
@@ -74,20 +68,21 @@ import { AffinityCard } from "@/components/partner/affinity-card"
 
 export function PartnerDashboardView({
   isPrimaryDashboard = false,
+  initialData,
 }: {
   isPrimaryDashboard?: boolean
+  initialData?: FullPartnerDashboardResult
 } = {}) {
   const router = useAppRouter()
-  const [dashboardData, setDashboardData] = React.useState<PartnerDashboardData | null>(null)
-  const [loading, setLoading] = React.useState(true)
+  const [dashboardData, setDashboardData] = React.useState<PartnerDashboardData | null>(initialData?.dashboardData ?? null)
+  const [loading, setLoading] = React.useState(!initialData)
   const [error, setError] = React.useState<string | null>(null)
 
   // Category data
-  const [cycleEstimates, setCycleEstimates] = React.useState<SharedCycleEstimateResult | null>(null)
-  const [periodStatus, setPeriodStatus] = React.useState<SharedPeriodStatusResult | null>(null)
-  const [cyclePreferences, setCyclePreferences] = React.useState<SharedCyclePreferencesResult | null>(null)
-  const [dailyNotes, setDailyNotes] = React.useState<SharedDailyNotesResult | null>(null)
-  const [categoryLoading, setCategoryLoading] = React.useState(true)
+  const [cycleEstimates, setCycleEstimates] = React.useState<SharedCycleEstimateResult | null>(initialData?.cycleEstimates ?? null)
+  const [periodStatus, setPeriodStatus] = React.useState<SharedPeriodStatusResult | null>(initialData?.periodStatus ?? null)
+  const [cyclePreferences, setCyclePreferences] = React.useState<SharedCyclePreferencesResult | null>(initialData?.cyclePreferences ?? null)
+  const [categoryLoading, setCategoryLoading] = React.useState(!initialData)
 
   const refreshEstimates = React.useCallback(async () => {
     const res = await getSharedCycleEstimatesAction()
@@ -104,10 +99,6 @@ export function PartnerDashboardView({
     setCyclePreferences(res)
   }, [])
 
-  const refreshDailyNotes = React.useCallback(async () => {
-    const res = await getSharedDailyNotesAction()
-    setDailyNotes(res)
-  }, [])
 
   const lastFocusRef = React.useRef<number>(0)
 
@@ -121,12 +112,9 @@ export function PartnerDashboardView({
       const res = await getPartnerDashboardFullAction()
       setDashboardData(res.dashboardData)
 
-      if (res.dashboardData.authorized) {
-        if (res.cycleEstimates) setCycleEstimates(res.cycleEstimates)
-        if (res.periodStatus) setPeriodStatus(res.periodStatus)
-        if (res.cyclePreferences) setCyclePreferences(res.cyclePreferences)
-        if (res.dailyNotes) setDailyNotes(res.dailyNotes)
-      }
+      setCycleEstimates(res.cycleEstimates)
+      setPeriodStatus(res.periodStatus)
+      setCyclePreferences(res.cyclePreferences)
     } catch {
       setError("Failed to load partner dashboard.")
     } finally {
@@ -136,7 +124,8 @@ export function PartnerDashboardView({
   }, [])
 
   React.useEffect(() => {
-    load(true)
+    lastFocusRef.current = Date.now()
+    const initialTimer = initialData ? undefined : setTimeout(() => void load(true), 0)
 
     // Re-synchronize when partner tabs back to the dashboard (throttled to 30s)
     const handleFocus = () => {
@@ -148,9 +137,10 @@ export function PartnerDashboardView({
     }
     window.addEventListener("focus", handleFocus)
     return () => {
+      clearTimeout(initialTimer)
       window.removeEventListener("focus", handleFocus)
     }
-  }, [load])
+  }, [load, initialData])
 
   // Loading state
   if (loading) {
@@ -238,7 +228,6 @@ export function PartnerDashboardView({
 
   const canManagePeriod = managementPermissions.includes("manage_period_status")
   const canManageCyclePrefs = managementPermissions.includes("manage_cycle_preferences")
-  const canManageDailyNotes = managementPermissions.includes("manage_daily_notes")
 
   return (
     <div className="space-y-6 pb-8 max-w-2xl mx-auto animate-in fade-in duration-200">
@@ -402,20 +391,11 @@ export function PartnerDashboardView({
             />
           )}
 
-          {/* 4. Daily Notes */}
-          {categories.includes("daily_notes") && dailyNotes ? (
-            <DailyNotesCard
-              data={dailyNotes}
-              canManage={canManageDailyNotes}
-              partnerDisplayName={dashboardData.ownerDisplayName}
-              onNotesUpdated={refreshDailyNotes}
-            />
-          ) : (
-            <PrivateCategoryPlaceholderCard
-              category="daily_notes"
-              partnerDisplayName={dashboardData.ownerDisplayName}
-            />
-          )}
+          {categories.includes("daily_notes") ? (
+            <Link href="/notes?view=partner" prefetch={true} className="inline-flex rounded-xl border border-border px-4 py-3 text-sm font-semibold text-primary">
+              {managementPermissions.includes("manage_daily_notes") ? "View Notes / Add Note" : "View Notes"}
+            </Link>
+          ) : <PrivateCategoryPlaceholderCard category="daily_notes" partnerDisplayName={dashboardData.ownerDisplayName} />}
         </div>
       )}
 
@@ -588,9 +568,9 @@ function CycleEstimatesCard({ data }: { data: SharedCycleEstimateResult }) {
               <p className="text-xs font-semibold text-foreground">{formatDate(d.estimatedNextPeriodDate)}</p>
               {d.estimatedNextPeriodDaysUntil !== null && (
                 <p className="text-[10px] text-primary font-medium">
-                  {d.estimatedNextPeriodDaysUntil <= 0
+                  {d.estimatedNextPeriodDaysUntil === 0
                     ? "Expected today"
-                    : `${d.estimatedNextPeriodDaysUntil} day${d.estimatedNextPeriodDaysUntil === 1 ? "" : "s"} away`}
+                    : d.estimatedNextPeriodDaysUntil < 0 ? "Estimated date has passed; cycle continues" : `${d.estimatedNextPeriodDaysUntil} days away (estimate)`}
                 </p>
               )}
             </div>
@@ -599,7 +579,7 @@ function CycleEstimatesCard({ data }: { data: SharedCycleEstimateResult }) {
             <div className="p-2.5 rounded-xl bg-secondary/20 border border-border/20 space-y-0.5">
               <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
                 <TrendingUp className="size-3" />
-                <span>Avg Cycle</span>
+                <span>Historical estimate</span>
               </div>
               <p className="text-xs font-semibold text-foreground">{d.averageCycleLength} days</p>
             </div>
@@ -781,6 +761,7 @@ function CyclePreferencesCard({
 
       {canManage && (
         <EditCyclePreferencesDialog
+          key={`${d.typicalCycleLength}-${d.lastPeriodStart}`}
           open={modalOpen}
           onOpenChange={setModalOpen}
           initialTypicalLength={d.typicalCycleLength}
@@ -792,177 +773,6 @@ function CyclePreferencesCard({
     </>
   )
 }
-
-function DailyNotesCard({
-  data,
-  canManage = false,
-  partnerDisplayName,
-  onNotesUpdated,
-}: {
-  data: SharedDailyNotesResult
-  canManage?: boolean
-  partnerDisplayName?: string
-  onNotesUpdated: () => void
-}) {
-  const [addModalOpen, setAddModalOpen] = React.useState(false)
-  const [editingNote, setEditingNote] = React.useState<SharedDailyNote | null>(null)
-  const [deletePendingId, setDeletePendingId] = React.useState<string | null>(null)
-
-  if (!data.ok || !data.data) return null
-
-  const notes = data.data
-
-  const handleDelete = async (note: SharedDailyNote) => {
-    if (!confirm(`Delete partner daily note for ${formatDate(note.date)}?`)) return
-    setDeletePendingId(note.id)
-    try {
-      const res = await deletePartnerDailyNoteAction({ noteId: note.id })
-      if (res.ok) {
-        onNotesUpdated()
-      } else {
-        alert(res.error || "Failed to delete note.")
-      }
-    } finally {
-      setDeletePendingId(null)
-    }
-  }
-
-  return (
-    <>
-      <Card className="overflow-hidden border-border/70 shadow-xs">
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2.5">
-              <div className="flex size-8 items-center justify-center rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
-                <BookOpen className="size-4" />
-              </div>
-              <div>
-                <CardTitle className="text-sm font-semibold">Daily Notes</CardTitle>
-                <CardDescription className="text-[11px]">
-                  {notes.length > 0 ? `${notes.length} shared note${notes.length === 1 ? "" : "s"}` : "No notes shared"}
-                </CardDescription>
-              </div>
-            </div>
-
-            {canManage ? (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setAddModalOpen(true)}
-                className="h-8 px-2.5 text-xs gap-1.5 rounded-xl border-amber-500/30 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10 cursor-pointer font-medium"
-              >
-                <Plus className="size-3.5" />
-                <span>Add Note</span>
-              </Button>
-            ) : (
-              <Badge
-                variant="outline"
-                className="text-[10px] px-2 py-0.5 font-medium border-border/70 text-muted-foreground bg-secondary/30"
-              >
-                Read-Only
-              </Badge>
-            )}
-          </div>
-        </CardHeader>
-        <CardContent>
-          {notes.length === 0 ? (
-            <div className="p-4 rounded-xl bg-secondary/20 text-center">
-              <p className="text-xs text-muted-foreground">
-                {canManage ? "No daily notes to display." : "No daily notes shared by your partner yet."}
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-2 max-h-80 overflow-y-auto">
-              {notes.slice(0, 15).map((note) => (
-                <div
-                  key={note.id}
-                  className="p-3 rounded-xl bg-secondary/30 border border-border/30 space-y-1 relative group"
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
-                        {formatDate(note.date)}
-                      </p>
-                      {note.createdAt && (
-                        <span className="text-[10px] text-muted-foreground font-mono">
-                          {new Date(note.createdAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
-                        </span>
-                      )}
-                    </div>
-                    {canManage && (
-                      <div className="flex items-center gap-1">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setEditingNote(note)}
-                          className="h-6 w-6 p-0 text-muted-foreground hover:text-amber-600 dark:hover:text-amber-400 rounded-md cursor-pointer"
-                          aria-label={`Edit note for ${note.date}`}
-                        >
-                          <Edit3 className="size-3" />
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          disabled={deletePendingId === note.id}
-                          onClick={() => handleDelete(note)}
-                          className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive rounded-md cursor-pointer"
-                          aria-label={`Delete note for ${note.date}`}
-                        >
-                          {deletePendingId === note.id ? (
-                            <Loader2 className="size-3 animate-spin" />
-                          ) : (
-                            <Trash2 className="size-3" />
-                          )}
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                  <p className="text-xs text-foreground leading-relaxed whitespace-pre-wrap break-words">
-                    {note.content}
-                  </p>
-                </div>
-              ))}
-              {notes.length > 15 && (
-                <p className="text-[10px] text-muted-foreground text-center pt-1">
-                  Showing 15 of {notes.length} notes
-                </p>
-              )}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {canManage && (
-        <>
-          <AddDailyNoteDialog
-            open={addModalOpen}
-            onOpenChange={setAddModalOpen}
-            partnerDisplayName={partnerDisplayName}
-            onSuccess={onNotesUpdated}
-          />
-          {editingNote && (
-            <EditDailyNoteDialog
-              open={Boolean(editingNote)}
-              onOpenChange={(open) => {
-                if (!open) setEditingNote(null)
-              }}
-              note={editingNote}
-              partnerDisplayName={partnerDisplayName}
-              onSuccess={() => {
-                setEditingNote(null)
-                onNotesUpdated()
-              }}
-            />
-          )}
-        </>
-      )}
-    </>
-  )
-}
-
-// ─── Modal Dialogs for Co-Management ─────────────────────────────────────────
 
 function ManagePeriodDialog({
   open,
@@ -1116,11 +926,6 @@ function EditCyclePreferencesDialog({
   const [errorMsg, setErrorMsg] = React.useState<string | null>(null)
   const [success, setSuccess] = React.useState(false)
 
-  React.useEffect(() => {
-    if (initialTypicalLength) setTypicalLength(initialTypicalLength)
-    if (initialLastPeriodStart) setLastPeriodStart(initialLastPeriodStart)
-  }, [initialTypicalLength, initialLastPeriodStart])
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setSubmitting(true)
@@ -1233,273 +1038,6 @@ function EditCyclePreferencesDialog({
     </Dialog>
   )
 }
-
-function AddDailyNoteDialog({
-  open,
-  onOpenChange,
-  partnerDisplayName,
-  onSuccess,
-}: {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  partnerDisplayName?: string
-  onSuccess: () => void
-}) {
-  const todayStr = new Date().toISOString().split("T")[0]
-  const [date, setDate] = React.useState(todayStr)
-  const [content, setContent] = React.useState("")
-  const [submitting, setSubmitting] = React.useState(false)
-  const [errorMsg, setErrorMsg] = React.useState<string | null>(null)
-  const [success, setSuccess] = React.useState(false)
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setSubmitting(true)
-    setErrorMsg(null)
-    setSuccess(false)
-
-    try {
-      const res = await createPartnerDailyNoteAction({ date, content })
-
-      if (res.ok) {
-        setSuccess(true)
-        setTimeout(() => {
-          onOpenChange(false)
-          setContent("")
-          onSuccess()
-          setSuccess(false)
-        }, 800)
-      } else {
-        setErrorMsg(res.error || "Failed to create daily note.")
-      }
-    } catch {
-      setErrorMsg("Network error saving daily note.")
-    } finally {
-      setSubmitting(false)
-    }
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-sm rounded-3xl p-6">
-        <DialogHeader className="space-y-1">
-          <DialogTitle className="text-base font-semibold">Add Daily Note</DialogTitle>
-          <DialogDescription className="text-xs text-muted-foreground">
-            Create a shared note for {partnerDisplayName || "partner"}.
-          </DialogDescription>
-        </DialogHeader>
-
-        {errorMsg && (
-          <div className="flex items-start gap-2 p-2.5 rounded-xl bg-destructive/10 text-destructive text-xs">
-            <AlertCircle className="size-4 shrink-0 mt-0.5" />
-            <span>{errorMsg}</span>
-          </div>
-        )}
-
-        {success ? (
-          <div className="flex items-center justify-center py-6 gap-2 text-emerald-600 dark:text-emerald-400 font-medium text-sm">
-            <Check className="size-4" />
-            <span>Daily note saved!</span>
-          </div>
-        ) : (
-          <form onSubmit={handleSubmit} className="space-y-3.5 pt-2">
-            <div className="space-y-1.5">
-              <Label className="text-xs font-medium">Date</Label>
-              <Input
-                type="date"
-                max={todayStr}
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
-                required
-                className="h-10 text-xs rounded-xl"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <div className="flex justify-between items-center">
-                <Label className="text-xs font-medium">Note Content</Label>
-                <span className="text-[10px] text-muted-foreground font-mono">
-                  {content.length}/5,000
-                </span>
-              </div>
-              <textarea
-                value={content}
-                onChange={(e) => setContent(e.target.value)}
-                required
-                maxLength={5000}
-                placeholder="Log symptoms, mood, or a helpful reminder..."
-                rows={4}
-                className="w-full text-xs p-3 rounded-xl border border-input bg-background text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 resize-none"
-              />
-            </div>
-
-            <div className="flex items-center gap-2 pt-2">
-              <Button
-                type="button"
-                variant="outline"
-                disabled={submitting}
-                onClick={() => onOpenChange(false)}
-                className="flex-1 h-10 rounded-xl text-xs cursor-pointer"
-              >
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                disabled={submitting || !content.trim()}
-                className="flex-1 h-10 rounded-xl text-xs font-semibold cursor-pointer gap-1.5"
-              >
-                {submitting ? (
-                  <>
-                    <Loader2 className="size-3.5 animate-spin" />
-                    <span>Saving...</span>
-                  </>
-                ) : (
-                  <span>Add Note</span>
-                )}
-              </Button>
-            </div>
-          </form>
-        )}
-      </DialogContent>
-    </Dialog>
-  )
-}
-
-function EditDailyNoteDialog({
-  open,
-  onOpenChange,
-  note,
-  partnerDisplayName,
-  onSuccess,
-}: {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  note: SharedDailyNote
-  partnerDisplayName?: string
-  onSuccess: () => void
-}) {
-  const [content, setContent] = React.useState(note.content)
-  const [submitting, setSubmitting] = React.useState(false)
-  const [errorMsg, setErrorMsg] = React.useState<string | null>(null)
-  const [success, setSuccess] = React.useState(false)
-
-  React.useEffect(() => {
-    setContent(note.content)
-    setErrorMsg(null)
-    setSuccess(false)
-  }, [note])
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setSubmitting(true)
-    setErrorMsg(null)
-    setSuccess(false)
-
-    try {
-      const res = await updatePartnerDailyNoteAction({ noteId: note.id, content })
-
-      if (res.ok) {
-        setSuccess(true)
-        setTimeout(() => {
-          onOpenChange(false)
-          onSuccess()
-          setSuccess(false)
-        }, 800)
-      } else {
-        setErrorMsg(res.error || "Failed to update daily note.")
-      }
-    } catch {
-      setErrorMsg("Network error updating daily note.")
-    } finally {
-      setSubmitting(false)
-    }
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-sm rounded-3xl p-6">
-        <DialogHeader className="space-y-1">
-          <DialogTitle className="text-base font-semibold">Edit Daily Note</DialogTitle>
-          <DialogDescription className="text-xs text-muted-foreground">
-            Update note for {formatDate(note.date)} ({partnerDisplayName || "partner"}).
-          </DialogDescription>
-        </DialogHeader>
-
-        {errorMsg && (
-          <div className="flex items-start gap-2 p-2.5 rounded-xl bg-destructive/10 text-destructive text-xs">
-            <AlertCircle className="size-4 shrink-0 mt-0.5" />
-            <span>{errorMsg}</span>
-          </div>
-        )}
-
-        {success ? (
-          <div className="flex items-center justify-center py-6 gap-2 text-emerald-600 dark:text-emerald-400 font-medium text-sm">
-            <Check className="size-4" />
-            <span>Daily note updated!</span>
-          </div>
-        ) : (
-          <form onSubmit={handleSubmit} className="space-y-3.5 pt-2">
-            <div className="space-y-1.5">
-              <Label className="text-xs font-medium">Date</Label>
-              <Input
-                type="text"
-                disabled
-                value={formatDate(note.date)}
-                className="h-10 text-xs rounded-xl bg-muted/50 cursor-not-allowed opacity-80"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <div className="flex justify-between items-center">
-                <Label className="text-xs font-medium">Note Content</Label>
-                <span className="text-[10px] text-muted-foreground font-mono">
-                  {content.length}/5,000
-                </span>
-              </div>
-              <textarea
-                value={content}
-                onChange={(e) => setContent(e.target.value)}
-                required
-                maxLength={5000}
-                placeholder="Log symptoms, mood, or a helpful reminder..."
-                rows={4}
-                className="w-full text-xs p-3 rounded-xl border border-input bg-background text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 resize-none"
-              />
-            </div>
-
-            <div className="flex items-center gap-2 pt-2">
-              <Button
-                type="button"
-                variant="outline"
-                disabled={submitting}
-                onClick={() => onOpenChange(false)}
-                className="flex-1 h-10 rounded-xl text-xs cursor-pointer"
-              >
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                disabled={submitting || !content.trim()}
-                className="flex-1 h-10 rounded-xl text-xs font-semibold cursor-pointer gap-1.5"
-              >
-                {submitting ? (
-                  <>
-                    <Loader2 className="size-3.5 animate-spin" />
-                    <span>Saving...</span>
-                  </>
-                ) : (
-                  <span>Save Note</span>
-                )}
-              </Button>
-            </div>
-          </form>
-        )}
-      </DialogContent>
-    </Dialog>
-  )
-}
-
-// ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function formatDate(dateStr: string): string {
   try {

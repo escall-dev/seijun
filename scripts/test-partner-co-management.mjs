@@ -495,7 +495,8 @@ async function main() {
 
     const hasPeriodModal = dashFile.includes("ManagePeriodDialog")
     const hasCyclePrefsModal = dashFile.includes("EditCyclePreferencesDialog")
-    const hasNotesModal = dashFile.includes("AddDailyNoteDialog")
+    const notesEditor = fs.readFileSync(path.join(projectRoot, "components", "notes", "note-editor-dialog.tsx"), "utf-8")
+    const hasNotesModal = dashFile.includes("/notes?view=partner") && notesEditor.includes("createPartnerDailyNoteAction")
     const hasOwnerAccessSection = settingsCardFile.includes("Co-Management Access")
     const hasPrerequisiteEnforcement = settingsCardFile.includes("(Requires View)")
 

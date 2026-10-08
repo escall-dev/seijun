@@ -10,6 +10,7 @@ interface CurrentCycleCardProps {
   currentCycle: CycleRecord | null
   statusInfo: CurrentCycleStatus
   expectedCycleLength: number
+  expectedNoLaterThanDate?: string | null
 }
 
 function formatDate(dateStr: string): string {
@@ -27,6 +28,7 @@ export function CurrentCycleCard({
   currentCycle,
   statusInfo,
   expectedCycleLength,
+  expectedNoLaterThanDate,
 }: CurrentCycleCardProps) {
   if (!currentCycle) {
     return (
@@ -158,9 +160,9 @@ export function CurrentCycleCard({
           </span>
         </div>
 
-        {/* Supporting Subtitle: Day X of ~Y days */}
+        {/* Recorded day is separate from historical estimates. */}
         <div className="relative z-20 text-xs sm:text-sm text-muted-foreground font-medium mb-2.5">
-          Day {currentDay} of ~{expectedCycleLength} days
+          Day {currentDay}
         </div>
 
         {/* Progress Line */}
@@ -168,6 +170,7 @@ export function CurrentCycleCard({
           <CycleProgressVisualizer
             currentDay={currentDay}
             expectedTotalDays={expectedCycleLength}
+            expectedNoLaterThanDate={expectedNoLaterThanDate}
             periodDaysCount={periodDaysCount}
             isOnPeriod={statusInfo.isOnPeriod}
           />
@@ -198,4 +201,3 @@ export function CurrentCycleCard({
     </section>
   )
 }
-

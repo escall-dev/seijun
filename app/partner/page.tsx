@@ -1,6 +1,7 @@
 import { getAuthenticatedUser } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
 import { PartnerDashboardView } from "@/components/partner/partner-dashboard-view"
+import { getPartnerDashboardFullAction } from "@/app/actions/partner-shared"
 
 export const dynamic = "force-dynamic"
 
@@ -16,5 +17,6 @@ export default async function PartnerDashboardPage() {
     redirect("/login?redirect=/partner")
   }
 
-  return <PartnerDashboardView />
+  const initialData = await getPartnerDashboardFullAction()
+  return <PartnerDashboardView initialData={initialData} />
 }

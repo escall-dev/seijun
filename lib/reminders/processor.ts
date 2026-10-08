@@ -82,6 +82,7 @@ export async function processPendingNotificationEvents(
       .from("notification_events")
       .select("id, user_id, cycle_id, type, scheduled_for, title, body, url, metadata")
       .eq("status", "pending")
+      .neq("type", "partner_daily_notes")
       .lte("scheduled_for", targetDateStr)
       .order("scheduled_for", { ascending: true })
       .limit(batchLimit)

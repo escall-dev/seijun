@@ -59,7 +59,7 @@ export function CycleDetailView({ cycle }: CycleDetailViewProps) {
   const [deleteOpen, setDeleteOpen] = React.useState(false)
   const [updatingDayId, setUpdatingDayId] = React.useState<string | null>(null)
 
-  const isOngoing = !cycle.end_date
+  const isOngoing = !cycle.cycle_end_date
   const periodDays = cycle.period_days || []
 
   const handleFlowChange = async (dayId: string, newFlow: FlowLevel) => {
@@ -125,7 +125,7 @@ export function CycleDetailView({ cycle }: CycleDetailViewProps) {
         <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight text-foreground">
           {isOngoing
             ? `Cycle started ${formatShortDate(cycle.start_date)}`
-            : `${formatShortDate(cycle.start_date)} – ${formatShortDate(cycle.end_date!)}`}
+            : `${formatShortDate(cycle.start_date)} – ${formatShortDate(cycle.cycle_end_date!)}`}
         </h1>
         <p className="text-sm text-muted-foreground">
           Detailed breakdown of your period days, duration, and flow intensity.
@@ -158,7 +158,7 @@ export function CycleDetailView({ cycle }: CycleDetailViewProps) {
             <div>
               <p className="text-xs text-muted-foreground">Cycle Length</p>
               <p className="text-base font-semibold text-foreground">
-                {cycle.cycle_length ? `${cycle.cycle_length} days` : "First recorded"}
+                {cycle.cycle_length ? `${cycle.cycle_length} days (recorded)` : "In progress"}
               </p>
             </div>
           </CardContent>

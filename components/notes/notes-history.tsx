@@ -1,7 +1,9 @@
 "use client"
 
 import * as React from "react"
-import { useRouter } from "next/navigation"
+import { getOlderNotesAction } from "@/app/actions/notes"
+import { groupNotesByDate, canEditNote, getNoteAuthorLabel } from "@/lib/notes/timeline"
+import { getTodayDateString } from "@/lib/calculations/cycle-calculations"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -23,21 +25,26 @@ import {
 import { cn } from "@/lib/utils"
 
 interface NotesHistoryProps {
+  initialTab?: "own" | "partner"
+  ownCursor?: string | null
+  partnerCursor?: string | null
+  snapshot?: string
   notes: DailyNoteRecord[]
   partnerNotes?: DailyNoteRecord[]
   isPartnerContext?: boolean
   hasActivePartner?: boolean
   partnerDisplayName?: string
+  partnerUserId?: string | null
   canManage?: boolean
   currentUserId?: string
 }
 
 function formatDateHeader(dateStr: string): { formatted: string; relative: string | null } {
   try {
-    const todayStr = new Date().toISOString().split("T")[0]
-    const yesterday = new Date()
+    const todayStr = getTodayDateString()
+    const yesterday = new Date(todayStr + "T12:00:00")
     yesterday.setDate(yesterday.getDate() - 1)
-    const yesterdayStr = yesterday.toISOString().split("T")[0]
+    const yesterdayStr = `${yesterday.getFullYear()}-${String(yesterday.getMonth() + 1).padStart(2, "0")}-${String(yesterday.getDate()).padStart(2, "0")}`
 
     const [y, m, d] = dateStr.split("-").map(Number)
     const dateObj = new Date(y, m - 1, d)
@@ -62,7 +69,7 @@ function formatPostingTime(isoString?: string): string {
   if (!isoString) return ""
   try {
     const d = new Date(isoString)
-    return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+    return d.toLocaleString("en-US", { timeZone: "Asia/Manila", year: "numeric", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", second: "2-digit", timeZoneName: "short" })
   } catch {
     return ""
   }
@@ -75,36 +82,12 @@ interface DateGroup {
   entries: DailyNoteRecord[]
 }
 
-function groupNotesByDate(notes: DailyNoteRecord[]): DateGroup[] {
-  const groups: DateGroup[] = []
-  const map = new Map<string, DailyNoteRecord[]>()
-
-  for (const note of notes) {
-    if (!map.has(note.date)) {
-      const arr: DailyNoteRecord[] = []
-      map.set(note.date, arr)
-      groups.push({ date: note.date, entries: arr })
-    }
-    map.get(note.date)!.push(note)
-  }
-
-  // Sort entries within each date: newest created_at first
-  for (const group of groups) {
-    group.entries.sort((a, b) => {
-      const timeA = a.created_at ? new Date(a.created_at).getTime() : 0
-      const timeB = b.created_at ? new Date(b.created_at).getTime() : 0
-      return timeB - timeA
-    })
-  }
-
-  return groups
-}
-
 function NoteEntryItem({
   note,
   canManage,
   showAuthor,
   partnerDisplayName,
+  partnerUserId,
   currentUserId,
   onEdit,
   onDelete,
@@ -113,6 +96,7 @@ function NoteEntryItem({
   canManage: boolean
   showAuthor?: boolean
   partnerDisplayName?: string
+  partnerUserId?: string | null
   currentUserId?: string
   onEdit: (note: DailyNoteRecord) => void
   onDelete: (note: DailyNoteRecord) => void
@@ -124,7 +108,8 @@ function NoteEntryItem({
     : note.content
 
   const postingTime = formatPostingTime(note.created_at)
-  const isSelf = note.author_id === currentUserId
+  const authorLabel = getNoteAuthorLabel(note, currentUserId, partnerUserId, partnerDisplayName)
+  const isSelf = authorLabel === "You"
 
   return (
     <div className="p-3.5 sm:p-4 rounded-xl bg-secondary/30 border border-border/40 space-y-2.5 transition-all hover:border-primary/30">
@@ -147,12 +132,12 @@ function NoteEntryItem({
                   : "border-amber-500/30 text-amber-600 dark:text-amber-400 bg-amber-500/5"
               )}
             >
-              {isSelf ? "You" : `By ${partnerDisplayName || "Partner"}`}
+              {authorLabel}
             </Badge>
           )}
         </div>
 
-        {canManage && (
+        {canManage && canEditNote(note, currentUserId) && (
           <div className="flex items-center gap-1">
             <Button
               type="button"
@@ -178,6 +163,7 @@ function NoteEntryItem({
         )}
       </div>
 
+      {note.sent_at && <p className="text-[11px] text-muted-foreground">Sent · To revise, add a new note.</p>}
       <p className="text-sm text-foreground/90 whitespace-pre-wrap leading-relaxed break-words">
         {displayContent}
       </p>
@@ -212,6 +198,7 @@ function DateGroupCard({
   canManage,
   showAuthor,
   partnerDisplayName,
+  partnerUserId,
   currentUserId,
   onEdit,
   onDelete,
@@ -220,6 +207,7 @@ function DateGroupCard({
   canManage: boolean
   showAuthor?: boolean
   partnerDisplayName?: string
+  partnerUserId?: string | null
   currentUserId?: string
   onEdit: (note: DailyNoteRecord) => void
   onDelete: (note: DailyNoteRecord) => void
@@ -255,6 +243,7 @@ function DateGroupCard({
             canManage={canManage}
             showAuthor={showAuthor}
             partnerDisplayName={partnerDisplayName}
+            partnerUserId={partnerUserId}
             currentUserId={currentUserId}
             onEdit={onEdit}
             onDelete={onDelete}
@@ -266,29 +255,35 @@ function DateGroupCard({
 }
 
 export function NotesHistory({
+  initialTab = "own",
+  ownCursor = null, partnerCursor = null, snapshot = new Date().toISOString(),
   notes,
   partnerNotes = [],
   isPartnerContext = false,
   hasActivePartner = false,
   partnerDisplayName = "Partner",
+  partnerUserId,
   canManage = true,
   currentUserId,
 }: NotesHistoryProps) {
-  const router = useRouter()
+  const [older, setOlder] = React.useState<{ own: DailyNoteRecord[]; partner: DailyNoteRecord[] }>({ own: [], partner: [] })
+  const [cursors, setCursors] = React.useState({ own: ownCursor, partner: partnerCursor })
+  const [loadingOlder, setLoadingOlder] = React.useState(false)
+  const [pageError, setPageError] = React.useState<string | null>(null)
 
   // Tab state for Cycle Owner when partner notes exist or partner is active
   const showTabs = !isPartnerContext && (hasActivePartner || partnerNotes.length > 0)
-  const [activeTab, setActiveTab] = React.useState<"own" | "partner">("own")
+  const [activeTab, setActiveTab] = React.useState<"own" | "partner">(initialTab)
 
   const [editorOpen, setEditorOpen] = React.useState(false)
   const [editTarget, setEditTarget] = React.useState<DailyNoteRecord | null>(null)
   const [deleteTarget, setDeleteTarget] = React.useState<DailyNoteRecord | null>(null)
 
-  const activeNotes = isPartnerContext
-    ? notes
+  const activeNotes = React.useMemo(() => isPartnerContext
+    ? [...notes, ...older.own]
     : activeTab === "partner"
-    ? partnerNotes
-    : notes
+    ? [...partnerNotes, ...older.partner]
+    : [...notes, ...older.own], [isPartnerContext, activeTab, notes, partnerNotes, older])
 
   const groupedNotes = React.useMemo(() => {
     return groupNotesByDate(activeNotes)
@@ -308,8 +303,20 @@ export function NotesHistory({
     setDeleteTarget(note)
   }
 
-  const handleSuccess = () => {
-    router.refresh()
+  const handleSuccess = () => { setOlder({ own: [], partner: [] }) }
+
+  const loadOlder = async () => {
+    const tab = isPartnerContext ? "own" : activeTab
+    const cursor = cursors[tab]
+    if (!cursor || loadingOlder) return
+    setLoadingOlder(true)
+    setPageError(null)
+    try {
+      const page = await getOlderNotesAction({ cursor, snapshot, author: isPartnerContext ? "all" : tab, partnerView: isPartnerContext })
+      setOlder(previous => ({ ...previous, [tab]: [...new Map([...previous[tab], ...page.notes].map(note => [note.id, note])).values()] }))
+      setCursors(previous => ({ ...previous, [tab]: page.nextCursor }))
+    } catch { setPageError("Could not load older notes. Please try again.") }
+    finally { setLoadingOlder(false) }
   }
 
   return (
@@ -369,7 +376,7 @@ export function NotesHistory({
           </p>
         </div>
 
-        {canManage && (activeTab === "own" || isPartnerContext) && (
+        {canManage && (
           <Button
             type="button"
             onClick={handleOpenCreate}
@@ -377,7 +384,7 @@ export function NotesHistory({
             className="gap-1.5 rounded-xl shadow-redi-sm cursor-pointer"
           >
             <Plus className="size-4" />
-            <span>Write Note</span>
+            <span>Add Note</span>
           </Button>
         )}
       </div>
@@ -407,7 +414,7 @@ export function NotesHistory({
                   : "Add a note whenever you'd like to remember how your day went."}
               </p>
             </div>
-            {canManage && (activeTab === "own" || isPartnerContext) && (
+            {canManage && (
               <Button
                 type="button"
                 onClick={handleOpenCreate}
@@ -426,8 +433,9 @@ export function NotesHistory({
               key={group.date}
               group={group}
               canManage={canManage}
-              showAuthor={activeTab === "partner" || isPartnerContext}
+              showAuthor={true}
               partnerDisplayName={partnerDisplayName}
+              partnerUserId={partnerUserId}
               currentUserId={currentUserId}
               onEdit={handleEdit}
               onDelete={handleDelete}
@@ -436,6 +444,8 @@ export function NotesHistory({
         </div>
       )}
 
+      {pageError && <p role="alert" className="text-sm text-destructive">{pageError}</p>}
+      {cursors[isPartnerContext ? "own" : activeTab] && <Button variant="outline" disabled={loadingOlder} onClick={loadOlder}>{loadingOlder ? "Loading older dates…" : "Load older dates"}</Button>}
       {/* Note Editor Modal */}
       <NoteEditorDialog
         open={editorOpen}

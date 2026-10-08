@@ -212,6 +212,8 @@ export function LoginForm({ version }: LoginFormProps = {}) {
     } catch {
       // Ignore
     }
+    document.cookie = "seijun_cycle_context=; path=/; max-age=0; SameSite=Lax"
+    router.refresh()
     clearRememberedUser()
     setSessionLocked(false)
     await setSessionLockAction(false)
@@ -222,7 +224,7 @@ export function LoginForm({ version }: LoginFormProps = {}) {
     setSetupUserEmail(undefined)
     setSetupDisplayName(null)
     setViewMode("email-password")
-  }, [])
+  }, [router])
 
   // 4. Handle Forgot MPIN
   const handleForgotMpin = React.useCallback(async () => {

@@ -1,6 +1,6 @@
 {
   "name": "seijun",
-  "version": "1.21.0",
+  "version": "1.22.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -29,7 +29,8 @@
     "test:partner:affinity-exp": "node scripts/test-phase21-affinity-partner.mjs",
     "test:mpin": "node scripts/test-mpin-auth.mjs",
     "test:mpin-switching": "node scripts/test-mpin-account-switching.mjs",
-    "test": "node scripts/test-version.mjs && node scripts/test-account-classification.mjs && node scripts/test-mpin-auth.mjs && node scripts/test-mpin-account-switching.mjs"
+    "test": "node scripts/test-version.mjs && node scripts/test-account-classification.mjs && node scripts/test-mpin-auth.mjs && node scripts/test-mpin-account-switching.mjs",
+    "test:phase22": "node --single-threaded --max-old-space-size=512 --max-semi-space-size=2 --wasm-num-compilation-tasks=1 scripts/test-phase22.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",
@@ -47,6 +48,7 @@
     "web-push": "^3.6.7"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",

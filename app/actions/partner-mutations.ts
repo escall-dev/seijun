@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
+import { after } from "next/server"
 import type { Database } from "@/lib/supabase/types"
 import {
   authorizeSupporterManagement,
@@ -9,6 +10,8 @@ import {
 } from "@/lib/partner/authorization"
 import { syncCycleLengthsForUser } from "@/app/actions/cycles"
 import { sendPartnerCoManagementNotification } from "@/lib/partner/notification"
+import { deliverNoteNotifications } from "@/lib/server/note-notifications"
+import { getTodayDateString } from "@/lib/calculations/cycle-calculations"
 import { NOTE_MAX_LENGTH } from "@/lib/notes/types"
 
 /**
@@ -101,7 +104,7 @@ export async function recordPartnerPeriodAction(
   }
 
   const { ownerUserId, supporterUserId } = authResult.context
-  const todayStr = new Date().toISOString().split("T")[0]
+  const todayStr = getTodayDateString()
 
   const startDate = input.startDate?.trim()
   const endDate = input.endDate?.trim() || null
@@ -230,7 +233,7 @@ export async function updatePartnerPeriodAction(
   }
 
   const { ownerUserId, supporterUserId } = authResult.context
-  const todayStr = new Date().toISOString().split("T")[0]
+  const todayStr = getTodayDateString()
 
   const cycleId = input.cycleId?.trim()
   const startDate = input.startDate?.trim()
@@ -397,7 +400,7 @@ export async function updatePartnerCyclePreferencesAction(
   }
 
   const { ownerUserId, supporterUserId } = authResult.context
-  const todayStr = new Date().toISOString().split("T")[0]
+  const todayStr = getTodayDateString()
 
   const updatePayload: {
     typical_cycle_length?: number | null
@@ -472,6 +475,7 @@ export async function updatePartnerCyclePreferencesAction(
 // ─── 3. Daily Notes Co-Management ────────────────────────────────────────────
 
 export interface CreatePartnerDailyNoteInput {
+  requestId: string
   date: string
   content: string
 }
@@ -495,7 +499,7 @@ export async function createPartnerDailyNoteAction(
   }
 
   const { ownerUserId, supporterUserId } = authResult.context
-  const todayStr = new Date().toISOString().split("T")[0]
+  const todayStr = getTodayDateString()
 
   const date = input.date?.trim()
   const content = input.content?.trim()
@@ -516,32 +520,30 @@ export async function createPartnerDailyNoteAction(
     }
   }
 
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input.requestId ?? "")) return { ok: false, error: "Invalid note request." }
   try {
     const { data: newNote, error: insertError } = await supabase
       .from("daily_notes")
       .insert({
         user_id: ownerUserId,
         author_id: supporterUserId,
+        request_id: input.requestId,
         date,
         content,
       })
       .select("id")
       .single()
 
+    if (insertError?.code === "23505") {
+      const { data: existing } = await supabase.from("daily_notes").select("id").eq("author_id", supporterUserId).eq("request_id", input.requestId).eq("user_id", ownerUserId).maybeSingle()
+      if (existing) return { ok: true, data: { noteId: existing.id } }
+    }
     if (insertError || !newNote) {
       return { ok: false, error: insertError?.message || "Failed to save daily note." }
     }
 
-    // Notify owner
-    const supporter = await getSupporterIdentity(supabase, supporterUserId)
-    await sendPartnerCoManagementNotification({
-      supabase,
-      recipientUserId: ownerUserId,
-      actorUsername: supporter.username,
-      category: "partner_daily_notes",
-      title: "Partner Note Update",
-      body: `@${supporter.username} added a daily note.`,
-      url: "/notes",
+    after(async () => {
+      try { await deliverNoteNotifications(newNote.id) } catch { console.error("[partner-notes] Delivery failed; note remains saved.") }
     })
 
     revalidatePath("/partner")
@@ -568,71 +570,8 @@ export interface UpdatePartnerDailyNoteInput {
 export async function updatePartnerDailyNoteAction(
   input: UpdatePartnerDailyNoteInput
 ): Promise<PartnerMutationResult> {
-  const supabase = await createClient()
-
-  const authResult = await authorizeSupporterManagement(supabase, "manage_daily_notes")
-  if (!authResult.authorized) {
-    return {
-      ok: false,
-      reason: authResult.reason,
-      error: authResult.message,
-    }
-  }
-
-  const { ownerUserId, supporterUserId } = authResult.context
-  const content = input.content?.trim()
-
-  if (!content) {
-    return { ok: false, error: "Note content cannot be empty." }
-  }
-  if (content.length > NOTE_MAX_LENGTH) {
-    return {
-      ok: false,
-      error: `Note content cannot exceed ${NOTE_MAX_LENGTH.toLocaleString()} characters.`,
-    }
-  }
-
-  try {
-    let query = supabase.from("daily_notes").update({
-      content,
-      updated_at: new Date().toISOString(),
-    }).eq("user_id", ownerUserId)
-
-    if (input.noteId) {
-      query = query.eq("id", input.noteId)
-    } else if (input.date) {
-      query = query.eq("date", input.date)
-    } else {
-      return { ok: false, error: "Either noteId or date is required to identify the note." }
-    }
-
-    const { error: updateError } = await query
-
-    if (updateError) {
-      return { ok: false, error: updateError.message }
-    }
-
-    // Notify owner
-    const supporter = await getSupporterIdentity(supabase, supporterUserId)
-    await sendPartnerCoManagementNotification({
-      supabase,
-      recipientUserId: ownerUserId,
-      actorUsername: supporter.username,
-      category: "partner_daily_notes",
-      title: "Partner Note Update",
-      body: `@${supporter.username} updated a daily note.`,
-      url: "/notes",
-    })
-
-    revalidatePath("/partner")
-    revalidatePath("/notes")
-    revalidatePath("/dashboard")
-
-    return { ok: true }
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "Failed to update daily note."
-    return { ok: false, error: message }
-  }
+  void input
+  return { ok: false, error: "Sent partner notes are immutable. Add a new note." }
 }
 
 export interface DeletePartnerDailyNoteInput {
@@ -647,55 +586,6 @@ export interface DeletePartnerDailyNoteInput {
 export async function deletePartnerDailyNoteAction(
   input: DeletePartnerDailyNoteInput
 ): Promise<PartnerMutationResult> {
-  const supabase = await createClient()
-
-  const authResult = await authorizeSupporterManagement(supabase, "manage_daily_notes")
-  if (!authResult.authorized) {
-    return {
-      ok: false,
-      reason: authResult.reason,
-      error: authResult.message,
-    }
-  }
-
-  const { ownerUserId, supporterUserId } = authResult.context
-
-  try {
-    let query = supabase.from("daily_notes").delete().eq("user_id", ownerUserId)
-
-    if (input.noteId) {
-      query = query.eq("id", input.noteId)
-    } else if (input.date) {
-      query = query.eq("date", input.date)
-    } else {
-      return { ok: false, error: "Either noteId or date is required to delete the note." }
-    }
-
-    const { error: deleteError } = await query
-
-    if (deleteError) {
-      return { ok: false, error: deleteError.message }
-    }
-
-    // Notify owner
-    const supporter = await getSupporterIdentity(supabase, supporterUserId)
-    await sendPartnerCoManagementNotification({
-      supabase,
-      recipientUserId: ownerUserId,
-      actorUsername: supporter.username,
-      category: "partner_daily_notes",
-      title: "Partner Note Update",
-      body: `@${supporter.username} removed a daily note.`,
-      url: "/notes",
-    })
-
-    revalidatePath("/partner")
-    revalidatePath("/notes")
-    revalidatePath("/dashboard")
-
-    return { ok: true }
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "Failed to delete daily note."
-    return { ok: false, error: message }
-  }
+  void input
+  return { ok: false, error: "Sent partner notes are immutable. Add a new note." }
 }

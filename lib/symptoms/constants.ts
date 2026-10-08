@@ -63,6 +63,7 @@ export interface SymptomRecord {
   id: string
   user_id: string
   date: string // YYYY-MM-DD
+  symptoms?: string[] | null
   symptom: string
   severity: SeverityValue
   notes: string | null
@@ -84,4 +85,8 @@ export function isValidSeverity(value: string): value is SeverityValue {
 /** Returns a user-readable severity label (or the raw value as fallback). */
 export function getSeverityLabel(value: string): string {
   return SEVERITY_OPTIONS.find((s) => s.value === value)?.label ?? value
+}
+
+export function getSymptomValues(record: Pick<SymptomRecord, "symptom" | "symptoms">): string[] {
+  return [...new Set(record.symptoms?.length ? record.symptoms : [record.symptom])]
 }

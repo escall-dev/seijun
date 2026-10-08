@@ -158,6 +158,7 @@ export interface Database {
           id: string
           user_id: string
           date: string
+          symptoms: string[] | null
           symptom: string
           severity: "mild" | "moderate" | "severe"
           notes: string | null
@@ -167,6 +168,7 @@ export interface Database {
           id?: string
           user_id: string
           date: string
+          symptoms?: string[] | null
           symptom: string
           severity: "mild" | "moderate" | "severe"
           notes?: string | null
@@ -176,6 +178,7 @@ export interface Database {
           id?: string
           user_id?: string
           date?: string
+          symptoms?: string[] | null
           symptom?: string
           severity?: "mild" | "moderate" | "severe"
           notes?: string | null
@@ -187,6 +190,8 @@ export interface Database {
         Row: {
           id: string
           user_id: string
+          sent_at: string | null
+          request_id: string | null
           author_id: string | null
           date: string
           content: string
@@ -196,6 +201,8 @@ export interface Database {
         Insert: {
           id?: string
           user_id: string
+          sent_at?: string | null
+          request_id?: string | null
           author_id?: string | null
           date: string
           content: string
@@ -205,6 +212,8 @@ export interface Database {
         Update: {
           id?: string
           user_id?: string
+          sent_at?: string | null
+          request_id?: string | null
           author_id?: string | null
           date?: string
           content?: string
@@ -521,6 +530,8 @@ export interface Database {
       [_ in never]: never
     }
     Functions: {
+      claim_note_notification: { Args: { p_event_id: string }; Returns: string | null }
+      get_notes_date_page: { Args: { p_user_id: string; p_author: string; p_snapshot: string; p_before?: string; p_limit?: number }; Returns: Json }
       get_all_push_subscriptions_for_admin_test: {
         Args: Record<PropertyKey, never>
         Returns: {

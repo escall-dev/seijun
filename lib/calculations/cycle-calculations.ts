@@ -22,27 +22,26 @@ export function formatDateToString(date: Date): string {
  * Returns today's date formatted as YYYY-MM-DD in local time
  */
 export function getTodayDateString(): string {
-  return formatDateToString(new Date())
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date())
 }
 
 /**
  * Calculates inclusive difference in days between two YYYY-MM-DD date strings
  */
 export function calculateInclusiveDays(startStr: string, endStr: string): number {
-  const start = parseDateString(startStr)
-  const end = parseDateString(endStr)
-  const diffTime = end.getTime() - start.getTime()
-  return Math.round(diffTime / (1000 * 60 * 60 * 24)) + 1
+  return calculateDaysBetween(startStr, endStr) + 1
 }
 
 /**
  * Calculates days between two YYYY-MM-DD dates (later - earlier)
  */
 export function calculateDaysBetween(earlierStr: string, laterStr: string): number {
-  const earlier = parseDateString(earlierStr)
-  const later = parseDateString(laterStr)
-  const diffTime = later.getTime() - earlier.getTime()
-  return Math.round(diffTime / (1000 * 60 * 60 * 24))
+  // Calendar dates, rather than elapsed hours, also work across DST boundaries.
+  const ordinal = (value: string) => {
+    const [year, month, day] = value.split("-").map(Number)
+    return Date.UTC(year, month - 1, day) / 86400000
+  }
+  return ordinal(laterStr) - ordinal(earlierStr)
 }
 
 /**
@@ -197,27 +196,34 @@ export function getLatestPeriod(cycles: CycleRecord[]): LatestPeriodInfo | null 
  * Uses completed consecutive cycle intervals from actual cycle start dates.
  * Returns null if there are fewer than 2 cycles.
  */
-export function calculateAverageCycleLength(cycles: CycleRecord[]): number | null {
-  if (!cycles || cycles.length < 2) return null
+export function calculateAverageCycleLength(cycles: CycleRecord[], referenceDate = getTodayDateString()): number | null {
+  const intervals = getCompletedCycleLengths(cycles, referenceDate)
+  return intervals.length ? Math.round(median(intervals)) : null
+}
 
-  // Sort ASC to find consecutive intervals
-  const sorted = [...cycles].sort((a, b) =>
-    a.start_date > b.start_date ? 1 : a.start_date < b.start_date ? -1 : 0
-  )
+function median(values: number[]): number {
+  const sorted = [...values].sort((a, b) => a - b)
+  const middle = Math.floor(sorted.length / 2)
+  return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2
+}
 
-  const intervals: number[] = []
-  for (let i = 0; i < sorted.length - 1; i++) {
-    const diff = calculateDaysBetween(sorted[i].start_date, sorted[i + 1].start_date)
-    // Only accept realistic consecutive intervals
-    if (diff > 0 && diff < 120) {
-      intervals.push(diff)
-    }
-  }
+/** Recent completed start-to-start intervals; period end_date is not cycle end. */
+export function getCompletedCycleLengths(cycles: CycleRecord[], referenceDate = getTodayDateString()): number[] {
+  const starts = [...new Set(cycles.map(c => c.start_date).filter(date => date <= referenceDate))].sort()
+  const intervals = starts.slice(1).map((date, i) => calculateDaysBetween(starts[i], date))
+    .filter(days => days >= 18 && days <= 90).slice(-12)
+  if (intervals.length < 3) return intervals.filter(days => days <= 60)
+  const center = median(intervals)
+  const deviation = median(intervals.map(days => Math.abs(days - center)))
+  return intervals.filter(days => Math.abs(days - center) <= Math.max(7, deviation * 3))
+}
 
-  if (intervals.length === 0) return null
-
-  const sum = intervals.reduce((acc, curr) => acc + curr, 0)
-  return Math.round(sum / intervals.length)
+export function getRecordedCycleEnd(cycle: CycleRecord, cycles: CycleRecord[]): string | null {
+  const next = cycles.filter(c => c.start_date > cycle.start_date).sort((a, b) => a.start_date.localeCompare(b.start_date))[0]
+  if (!next) return null
+  const date = parseDateString(next.start_date)
+  date.setDate(date.getDate() - 1)
+  return formatDateToString(date)
 }
 
 /**
@@ -247,6 +253,9 @@ export function calculateAveragePeriodDuration(cycles: CycleRecord[]): number | 
 }
 
 export interface EstimatedNextPeriod {
+  windowStartDate?: string
+  windowEndDate?: string
+  historyCount?: number
   estimatedStartDate: string // YYYY-MM-DD
   daysUntil: number
   isFallback: boolean // True if using profile typical_cycle_length rather than completed history
@@ -263,6 +272,7 @@ export function calculateEstimatedNextPeriod(params: {
   averageCycleLength: number | null
   typicalCycleLength: number | null
   referenceDateStr?: string
+  cycles?: CycleRecord[]
 }): EstimatedNextPeriod | null {
   const {
     latestCycleStartDate,
@@ -273,10 +283,11 @@ export function calculateEstimatedNextPeriod(params: {
 
   if (!latestCycleStartDate) return null
 
-  const hasHistory = averageCycleLength !== null && averageCycleLength > 0
-  const cycleLength = hasHistory ? averageCycleLength! : typicalCycleLength
+  const historicalLength = params.cycles ? calculateAverageCycleLength(params.cycles, referenceDateStr) : averageCycleLength
+  const hasHistory = historicalLength !== null && historicalLength > 0
+  const cycleLength = hasHistory ? historicalLength! : typicalCycleLength
 
-  if (!cycleLength || cycleLength <= 0) return null
+  if (!cycleLength || !Number.isFinite(cycleLength) || cycleLength < 18 || cycleLength > 90) return null
 
   const start = parseDateString(latestCycleStartDate)
   const estimatedDate = new Date(start)
@@ -286,11 +297,23 @@ export function calculateEstimatedNextPeriod(params: {
   const daysUntil = calculateDaysBetween(referenceDateStr, estimatedStartDate)
 
   return {
+    ...getExpectedPeriodWindow(params.cycles ?? [], latestCycleStartDate, referenceDateStr),
     estimatedStartDate,
     daysUntil,
     isFallback: !hasHistory,
     cycleLengthUsed: cycleLength,
   }
+}
+
+function getExpectedPeriodWindow(cycles: CycleRecord[], start: string, reference: string) {
+  const lengths = getCompletedCycleLengths(cycles, reference)
+  if (lengths.length < 3) return { historyCount: lengths.length }
+  const add = (days: number) => {
+    const date = parseDateString(start)
+    date.setDate(date.getDate() + days)
+    return formatDateToString(date)
+  }
+  return { historyCount: lengths.length, windowStartDate: add(Math.min(...lengths)), windowEndDate: add(Math.max(...lengths)) }
 }
 
 export interface CycleProgress {

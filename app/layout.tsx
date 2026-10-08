@@ -1,3 +1,5 @@
+import { getAuthenticatedUser, createClient } from "@/lib/supabase/server"
+import { resolveServerCycleContext } from "@/lib/cycle-context/server"
 import type { Metadata, Viewport } from "next"
 import { Geist, Geist_Mono } from "next/font/google"
 import { Analytics } from "@vercel/analytics/next"
@@ -7,6 +9,7 @@ import { ServiceWorkerRegistration } from "@/components/pwa/service-worker-regis
 import { NavigationLoadingProvider } from "@/components/navigation/navigation-loading-context"
 import { NavigationLoadingOverlay } from "@/components/navigation/navigation-loading-overlay"
 import "./globals.css"
+export const dynamic = "force-dynamic"
 
 const geistSans = Geist({
   variable: "--font-sans",
@@ -49,11 +52,13 @@ export const metadata: Metadata = {
   },
 }
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
+  const user = await getAuthenticatedUser()
+  const initialContext = user ? await resolveServerCycleContext(await createClient(), user.id) : null
   return (
     <html
       lang="en"
@@ -73,7 +78,7 @@ export default function RootLayout({
       >
         <ThemeProvider>
           <NavigationLoadingProvider>
-            <AppShell>{children}</AppShell>
+            <AppShell initialContext={initialContext}>{children}</AppShell>
             <NavigationLoadingOverlay />
           </NavigationLoadingProvider>
         </ThemeProvider>

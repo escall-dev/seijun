@@ -80,7 +80,8 @@ export function CycleContextProvider({
 
   React.useEffect(() => {
     // Initial fetch if not provided or to ensure freshness
-    refreshContext(true)
+    lastFetchedRef.current = initialState ? Date.now() : 0
+    if (!initialState) setTimeout(() => void refreshContext(true), 0)
 
     const handleFocus = () => {
       refreshContext(false)
@@ -109,7 +110,7 @@ export function CycleContextProvider({
       window.removeEventListener("focus", handleFocus)
       window.removeEventListener("seijun:cycle-context-changed", handleContextEvent)
     }
-  }, [refreshContext])
+  }, [refreshContext, initialState])
 
   const switchContext = React.useCallback(
     async (mode: CycleContextMode) => {

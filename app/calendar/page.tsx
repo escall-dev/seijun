@@ -11,7 +11,6 @@ import { resolveServerCycleContext } from "@/lib/cycle-context/server"
 import { CycleContextSwitcher } from "@/components/cycle-context/cycle-context-switcher"
 import { Card, CardContent } from "@/components/ui/card"
 import Link from "next/link"
-import { Button } from "@/components/ui/button"
 
 export const dynamic = "force-dynamic"
 
@@ -20,7 +19,9 @@ export const metadata = {
   description: "View and explore menstrual cycle timeline and period tracking history.",
 }
 
-export default async function CalendarPage() {
+export default async function CalendarPage({ searchParams }: { searchParams: Promise<{ date?: string }> }) {
+  const { date } = await searchParams
+  const initialDate = date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : undefined
   const user = await getAuthenticatedUser()
 
   if (!user) {
@@ -105,7 +106,7 @@ export default async function CalendarPage() {
         </div>
 
         {/* Main Calendar View configured for Partner Display */}
-        <CalendarView
+        <CalendarView initialDate={initialDate}
           cycles={partnerCycles}
           symptoms={[]}
           notes={partnerNotes}
@@ -145,7 +146,7 @@ export default async function CalendarPage() {
       </div>
 
       {/* Main Interactive Calendar View */}
-      <CalendarView cycles={cycles} symptoms={symptoms} notes={notes} />
+      <CalendarView initialDate={initialDate} cycles={cycles} symptoms={symptoms} notes={notes} />
     </div>
   )
 }

@@ -8,16 +8,19 @@ import { MobileBottomNav } from "@/components/shell/mobile-bottom-nav"
 import { QuickLogProvider } from "@/components/shell/quick-log-context"
 import { CycleContextProvider } from "@/lib/cycle-context/cycle-context"
 import { SessionTimeoutProvider } from "@/components/auth/session-timeout-provider"
-import { UserProfileProvider } from "@/lib/hooks/use-user-profile"
+import type { CycleContextState } from "@/lib/cycle-context/types"
+import { useRouter } from "next/navigation"
+import { UserProfileProvider, useUserProfile } from "@/lib/hooks/use-user-profile"
 import { RealtimeNotificationProvider } from "@/components/notifications/realtime-notification-provider"
 import { cn } from "@/lib/utils"
 
 interface AppShellProps {
   children: React.ReactNode
+  initialContext?: CycleContextState | null
   className?: string
 }
 
-export function AppShell({ children, className }: AppShellProps) {
+export function AppShell({ children, className, initialContext }: AppShellProps) {
   const pathname = usePathname()
   const isAuthRoute =
     pathname === "/login" ||
@@ -37,9 +40,10 @@ export function AppShell({ children, className }: AppShellProps) {
           </div>
         )
       ) : (
-        <CycleContextProvider>
+        <UserProfileProvider key={initialContext?.currentUserId ?? "anonymous"} initialState={initialContext ? { userId: initialContext.currentUserId, displayName: initialContext.currentUserInfo?.displayName ?? null, avatarUrl: initialContext.currentUserInfo?.avatarUrl ?? null, isLoading: false } : undefined}>
+          <AccountContent expectedUserId={initialContext?.currentUserId ?? null}>
+          <CycleContextProvider key={`${initialContext?.currentUserId}-${initialContext?.mode}-${initialContext?.activeUserId}-${initialContext?.partnerInfo.relationshipId}-${initialContext?.permissions.enabledCategories.join(",")}-${initialContext?.permissions.managementPermissions.join(",")}`} initialState={initialContext}>
           <QuickLogProvider>
-            <UserProfileProvider>
               <RealtimeNotificationProvider>
                 <div className="relative min-h-screen min-h-dvh flex flex-col bg-background text-foreground overflow-x-clip">
                   {/* Desktop Header */}
@@ -62,10 +66,19 @@ export function AppShell({ children, className }: AppShellProps) {
                 {/* Mobile Bottom Navigation - placed outside container to stick reliably to viewport */}
                 <MobileBottomNav />
               </RealtimeNotificationProvider>
-            </UserProfileProvider>
           </QuickLogProvider>
         </CycleContextProvider>
+        </AccountContent>
+        </UserProfileProvider>
       )}
     </SessionTimeoutProvider>
   )
+}
+
+function AccountContent({ expectedUserId, children }: { expectedUserId: string | null; children: React.ReactNode }) {
+  const { userId } = useUserProfile()
+  const router = useRouter()
+  React.useEffect(() => { if (userId !== expectedUserId) router.refresh() }, [userId, expectedUserId, router])
+  if (userId !== expectedUserId) return <p role="status" className="p-6 text-sm text-muted-foreground">Loading your account…</p>
+  return children
 }
