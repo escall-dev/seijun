@@ -29,7 +29,8 @@
     "test:partner:affinity-exp": "node scripts/test-phase21-affinity-partner.mjs",
     "test:mpin": "node scripts/test-mpin-auth.mjs",
     "test:mpin-switching": "node scripts/test-mpin-account-switching.mjs",
-    "test": "node scripts/test-version.mjs && node scripts/test-account-classification.mjs && node scripts/test-mpin-auth.mjs && node scripts/test-mpin-account-switching.mjs",
+    "test:phase23": "node scripts/test-phase23-qa.mjs",
+    "test": "node scripts/test-version.mjs && node scripts/test-account-classification.mjs && node scripts/test-mpin-auth.mjs && node scripts/test-mpin-account-switching.mjs && node scripts/test-phase23-qa.mjs",
     "test:phase22": "node --single-threaded --max-old-space-size=512 --max-semi-space-size=2 --wasm-num-compilation-tasks=1 scripts/test-phase22.mjs"
   },
   "dependencies": {

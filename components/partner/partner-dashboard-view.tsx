@@ -228,110 +228,72 @@ export function PartnerDashboardView({
   const canManageCyclePrefs = managementPermissions.includes("manage_cycle_preferences")
 
   return (
-    <div className="space-y-6 pb-8 max-w-2xl mx-auto animate-in fade-in duration-200">
+    <div className="space-y-5 pb-8 max-w-2xl mx-auto animate-in fade-in duration-200">
       {/* Context Switcher if primary dashboard */}
       {isPrimaryDashboard && <CycleContextSwitcher />}
 
-      {/* Header */}
+      {/* Header identifying the connected owner's cycle */}
       <PartnerDashboardHeader
         isPrimaryDashboard={isPrimaryDashboard}
         ownerDisplayName={dashboardData.ownerDisplayName}
       />
 
-      {/* Partner Couple Identity Card with Interlinked Avatars */}
-      <Card className="overflow-hidden border-border/70 rounded-3xl shadow-xs bg-gradient-to-br from-lavender/25 via-background to-card">
-        <CardContent className="p-4 sm:p-5">
-          <div className="flex items-center justify-between gap-4">
-            <div className="flex items-center gap-3.5 sm:gap-4 min-w-0">
-              {/* Dual Interlinked Avatars with Overlapping Rings */}
-              <div className="relative flex items-center shrink-0 py-1">
-                {/* Supporter (You) Avatar */}
-                <div className="relative z-10">
-                  <Avatar
-                    src={dashboardData.supporterAvatarUrl}
-                    alt={dashboardData.supporterDisplayName || "You"}
-                    fallbackInitials={dashboardData.supporterDisplayName || "You"}
-                    size="md"
-                    className="size-11 sm:size-12 ring-2 ring-background shadow-xs border-2 border-primary/20"
-                  />
-                </div>
+      {/* Compact Partner Context Banner */}
+      <div className="flex items-center justify-between gap-3 px-3.5 py-2.5 rounded-2xl border border-border/70 bg-gradient-to-r from-lavender/20 via-background to-card shadow-2xs">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <Avatar
+            src={dashboardData.ownerAvatarUrl}
+            alt={dashboardData.ownerDisplayName || "Partner"}
+            fallbackInitials={dashboardData.ownerDisplayName || "Partner"}
+            size="sm"
+            className="size-8 ring-1 ring-background border border-lavender-border bg-lavender/60 shrink-0"
+          />
+          <div className="min-w-0 leading-tight">
+            <p className="text-xs font-semibold text-foreground truncate">
+              {dashboardData.ownerDisplayName}
+            </p>
+            {dashboardData.ownerUsername && (
+              <p className="text-[10px] font-mono text-muted-foreground truncate">
+                @{dashboardData.ownerUsername}
+              </p>
+            )}
+          </div>
+        </div>
 
-                {/* Heart bridge badge */}
-                <div className="absolute left-7 sm:left-8 -bottom-1 z-20 flex size-5 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-xs ring-2 ring-background">
-                  <HeartHandshake className="size-2.5 stroke-[2.4]" />
-                </div>
-
-                {/* Partner (Owner) Avatar */}
-                <div className="relative z-0 -ml-3 sm:-ml-3.5">
-                  <Avatar
-                    src={dashboardData.ownerAvatarUrl}
-                    alt={dashboardData.ownerDisplayName || "Partner"}
-                    fallbackInitials={dashboardData.ownerDisplayName || "Partner"}
-                    size="md"
-                    className="size-11 sm:size-12 ring-2 ring-background shadow-xs border-2 border-lavender-border bg-lavender/60"
-                  />
-                </div>
-              </div>
-
-              {/* Partner Details */}
-              <div className="space-y-0.5 min-w-0">
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <Badge
-                    variant="lavender"
-                    className="text-[10px] px-2 py-0.5 font-medium border-lavender-border/70 text-primary"
-                  >
-                    Supporter Space
-                  </Badge>
-                </div>
-                <p className="text-sm sm:text-base font-bold text-foreground truncate">
-                  {dashboardData.ownerDisplayName}
-                </p>
-                {dashboardData.ownerUsername && (
-                  <p className="text-xs font-mono text-primary font-medium">
-                    @{dashboardData.ownerUsername}
-                  </p>
-                )}
-              </div>
-            </div>
-
+        <div className="flex items-center gap-2 shrink-0">
+          <Badge
+            variant="lavender"
+            className="text-[10px] px-2 py-0.5 font-medium border-lavender-border/70 text-primary hidden sm:inline-flex"
+          >
+            Supporter Space
+          </Badge>
+          {managementPermissions.length > 0 ? (
             <Badge
               variant="outline"
-              className="text-[10px] px-2.5 py-0.5 font-medium border-emerald-500/40 text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 shrink-0"
+              className="text-[10px] px-2 py-0.5 font-medium border-primary/30 text-primary bg-primary/5 gap-1"
             >
-              Connected
+              <Sparkles className="size-2.5" />
+              <span>Co-Management</span>
             </Badge>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Affinity & Duration Card */}
-      <AffinityCard
-        startDate={dashboardData.relationshipStartDate}
-        initialFormat={dashboardData.affinityDisplayFormat}
-        partnerDisplayName={dashboardData.ownerDisplayName || "Partner"}
-        partnerUsername={dashboardData.ownerUsername}
-        relationshipStatus="active"
-        canEdit={true}
-        onStartDateChange={() => load(false)}
-        onFormatChange={() => load(false)}
-      />
-
-      {/* Mode Indicator: Co-Management vs Read-Only */}
-      {managementPermissions.length > 0 ? (
-        <div className="flex items-center gap-2 px-1 text-[11px] text-muted-foreground">
-          <Sparkles className="size-3.5 text-primary shrink-0" />
-          <span>
-            Co-Management Active • Authorized by {dashboardData.ownerDisplayName}
-          </span>
+          ) : (
+            <Badge
+              variant="outline"
+              className="text-[10px] px-2 py-0.5 font-medium border-muted text-muted-foreground bg-muted/20 gap-1"
+            >
+              <Eye className="size-2.5" />
+              <span>Read-only view</span>
+            </Badge>
+          )}
+          <Badge
+            variant="outline"
+            className="text-[10px] px-2.5 py-0.5 font-medium border-emerald-500/40 text-emerald-600 dark:text-emerald-400 bg-emerald-500/10"
+          >
+            Connected
+          </Badge>
         </div>
-      ) : (
-        <div className="flex items-center gap-2 px-1 text-[11px] text-muted-foreground">
-          <Eye className="size-3.5 shrink-0" />
-          <span>Read-only view • Data shared at your partner&apos;s discretion</span>
-        </div>
-      )}
+      </div>
 
-      {/* Shared Category Cards with Reassuring Privacy Placeholders */}
+      {/* Category Cards: Partner Cycle Overview, Period Details, Preferences */}
       {categoryLoading && categories.length > 0 ? (
         <div className="space-y-4">
           {categories.map((cat) => (
@@ -343,9 +305,13 @@ export function PartnerDashboardView({
           {categories.length === 0 && (
             <p className="sr-only">No Data Shared Yet</p>
           )}
-          {/* 1. Cycle Estimates */}
+
+          {/* 1. Partner Cycle Overview (Cycle Estimates) */}
           {categories.includes("cycle_estimates") && cycleEstimates ? (
-            <CycleEstimatesCard data={cycleEstimates} />
+            <CycleEstimatesCard
+              data={cycleEstimates}
+              partnerDisplayName={dashboardData.ownerDisplayName}
+            />
           ) : (
             <PrivateCategoryPlaceholderCard
               category="cycle_estimates"
@@ -353,7 +319,7 @@ export function PartnerDashboardView({
             />
           )}
 
-          {/* 2. Period Status */}
+          {/* 2. Relevant Cycle Details (Period Status) */}
           {categories.includes("period_status") && periodStatus ? (
             <PeriodStatusCard
               data={periodStatus}
@@ -389,18 +355,58 @@ export function PartnerDashboardView({
             />
           )}
 
+          {/* Daily Notes (when permitted) */}
           {categories.includes("daily_notes") ? (
-            <Link href="/notes?view=partner" prefetch={true} className="inline-flex rounded-xl border border-border px-4 py-3 text-sm font-semibold text-primary">
-              {managementPermissions.includes("manage_daily_notes") ? "View Notes / Add Note" : "View Notes"}
+            <Link
+              href="/notes?view=partner"
+              prefetch={true}
+              className="flex items-center justify-between rounded-2xl border border-border/70 bg-card p-3.5 text-xs font-semibold text-primary hover:bg-muted/30 transition-colors shadow-2xs"
+            >
+              <div className="flex items-center gap-2.5">
+                <div className="flex size-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                  <BookOpen className="size-3.5" />
+                </div>
+                <span>Shared Daily Notes</span>
+              </div>
+              <span className="text-[11px] font-normal text-muted-foreground">
+                {managementPermissions.includes("manage_daily_notes") ? "View & Add Notes →" : "View Notes →"}
+              </span>
             </Link>
-          ) : <PrivateCategoryPlaceholderCard category="daily_notes" partnerDisplayName={dashboardData.ownerDisplayName} />}
+          ) : (
+            <PrivateCategoryPlaceholderCard
+              category="daily_notes"
+              partnerDisplayName={dashboardData.ownerDisplayName}
+            />
+          )}
         </div>
       )}
 
-      {/* Privacy Footer */}
-      <div className="flex items-center gap-2 px-1 pt-2 text-[10px] text-muted-foreground/70">
-        <ShieldCheck className="size-3 shrink-0" />
-        <span>Privacy-first • Your partner controls all sharing & co-management permissions</span>
+      {/* 4. Affinity & Relationship Information (Placed Below Cycle Context) */}
+      <div className="pt-1">
+        <AffinityCard
+          startDate={dashboardData.relationshipStartDate}
+          initialFormat={dashboardData.affinityDisplayFormat}
+          partnerDisplayName={dashboardData.ownerDisplayName || "Partner"}
+          partnerUsername={dashboardData.ownerUsername}
+          relationshipStatus="active"
+          canEdit={true}
+          onStartDateChange={() => load(false)}
+          onFormatChange={() => load(false)}
+        />
+      </div>
+
+      {/* 5. Secondary Navigation & Supporting Details */}
+      <div className="flex items-center justify-between gap-2 px-1 pt-1 text-[10px] text-muted-foreground/70">
+        <div className="flex items-center gap-1.5">
+          <ShieldCheck className="size-3 shrink-0" />
+          <span>Privacy-first • Your partner controls all sharing & co-management permissions</span>
+        </div>
+        <Link
+          href="/settings/partner"
+          className="text-primary hover:underline font-medium text-[11px]"
+        >
+          Partner Settings
+        </Link>
       </div>
     </div>
   )
@@ -494,21 +500,34 @@ function PartnerDashboardHeader({
         </div>
       )}
       <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight text-foreground">
-        {isPrimaryDashboard && ownerDisplayName
-          ? `${ownerDisplayName}'s Cycle`
-          : "Partner Dashboard"}
+        {ownerDisplayName ? `${ownerDisplayName}'s Cycle` : "Partner Dashboard"}
       </h1>
-      <p className="text-sm text-muted-foreground leading-relaxed">
-        {isPrimaryDashboard && ownerDisplayName
-          ? `Shared cycle awareness and authorized co-management for ${ownerDisplayName}.`
+      <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
+        {ownerDisplayName
+          ? `Shared cycle awareness and authorized support for ${ownerDisplayName}.`
           : "Shared cycle awareness and authorized co-management."}
       </p>
     </div>
   )
 }
 
-function CycleEstimatesCard({ data }: { data: SharedCycleEstimateResult }) {
-  if (!data.ok || !data.data) return null
+function CycleEstimatesCard({
+  data,
+  partnerDisplayName,
+}: {
+  data: SharedCycleEstimateResult
+  partnerDisplayName?: string
+}) {
+  if (!data.ok || !data.data) {
+    return (
+      <Card className="overflow-hidden border-border/50 bg-secondary/15 rounded-2xl shadow-2xs">
+        <CardContent className="p-4 text-center space-y-1">
+          <p className="text-xs font-semibold text-foreground">Cycle Estimates Unavailable</p>
+          <p className="text-[11px] text-muted-foreground">{data.message || "No estimate data available."}</p>
+        </CardContent>
+      </Card>
+    )
+  }
 
   const d = data.data
   return (
@@ -519,79 +538,84 @@ function CycleEstimatesCard({ data }: { data: SharedCycleEstimateResult }) {
             <Activity className="size-4" />
           </div>
           <div>
-            <CardTitle className="text-sm font-semibold">Cycle Estimates</CardTitle>
-            <CardDescription className="text-[11px]">Current cycle overview</CardDescription>
+            <CardTitle className="text-sm font-semibold">
+              {partnerDisplayName ? `${partnerDisplayName}'s Cycle Overview` : "Cycle Overview"}
+            </CardTitle>
+            <CardDescription className="text-[11px]">Current cycle overview and estimates</CardDescription>
           </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-3">
-        {/* Current Status */}
-        <div className="p-3 rounded-xl bg-secondary/30 border border-border/30 space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-muted-foreground">Status</span>
-            <span className={`text-xs font-semibold ${d.isOnPeriod ? "text-rose-500" : "text-foreground"}`}>
-              {d.currentCyclePhase}
-            </span>
+        {!d.currentCycleStartDate && !d.estimatedNextPeriodDate && !d.averageCycleLength ? (
+          <div className="p-4 rounded-xl bg-secondary/20 border border-border/20 text-center space-y-1">
+            <p className="text-xs font-medium text-foreground">No cycle data recorded yet</p>
+            <p className="text-[11px] text-muted-foreground">
+              Cycle estimates will appear once {partnerDisplayName || "your partner"} logs their period.
+            </p>
           </div>
-          {d.currentCycleDay !== null && (
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-muted-foreground">Cycle Day</span>
-              <span className="text-xs font-bold text-foreground">{d.currentCycleDay}</span>
-            </div>
-          )}
-          {d.cycleProgress !== null && (
-            <div className="space-y-1">
-              <div className="flex justify-between text-[10px] text-muted-foreground">
-                <span>Progress</span>
-                <span>{d.cycleProgress}%</span>
+        ) : (
+          <>
+            {/* Current Status */}
+            <div className="p-3 rounded-xl bg-secondary/30 border border-border/30 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">Status</span>
+                <span className={`text-xs font-semibold ${d.isOnPeriod ? "text-rose-500" : "text-foreground"}`}>
+                  {d.currentCyclePhase}
+                </span>
               </div>
-              <div className="w-full h-1.5 bg-secondary rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-primary rounded-full transition-all duration-500"
-                  style={{ width: `${Math.min(100, d.cycleProgress)}%` }}
-                />
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Estimates Grid */}
-        <div className="grid grid-cols-2 gap-2">
-          {d.estimatedNextPeriodDate && (
-            <div className="p-2.5 rounded-xl bg-secondary/20 border border-border/20 space-y-0.5">
-              <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                <CalendarDays className="size-3" />
-                <span>Next Period</span>
-              </div>
-              <p className="text-xs font-semibold text-foreground">{formatDate(d.estimatedNextPeriodDate)}</p>
-              {d.estimatedNextPeriodDaysUntil !== null && (
-                <p className="text-[10px] text-primary font-medium">
-                  {d.estimatedNextPeriodDaysUntil === 0
-                    ? "Expected today"
-                    : d.estimatedNextPeriodDaysUntil < 0 ? "Estimated date has passed; cycle continues" : `${d.estimatedNextPeriodDaysUntil} days away (estimate)`}
-                </p>
+              {d.currentCycleDay !== null && (
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-muted-foreground">Cycle Day</span>
+                  <span className="text-xs font-bold text-foreground">Day {d.currentCycleDay}</span>
+                </div>
               )}
             </div>
-          )}
-          {d.averageCycleLength !== null && (
-            <div className="p-2.5 rounded-xl bg-secondary/20 border border-border/20 space-y-0.5">
-              <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                <TrendingUp className="size-3" />
-                <span>Historical estimate</span>
-              </div>
-              <p className="text-xs font-semibold text-foreground">{d.averageCycleLength} days</p>
+
+            {/* Estimates Grid */}
+            <div className="grid grid-cols-2 gap-2">
+              {d.estimatedNextPeriodDate && (
+                <div className="p-2.5 rounded-xl bg-secondary/20 border border-border/20 space-y-0.5">
+                  <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                    <CalendarDays className="size-3" />
+                    <span>Next Period</span>
+                  </div>
+                  <p className="text-xs font-semibold text-foreground">
+                    {d.windowStartDate && d.windowEndDate
+                      ? `${formatDate(d.windowStartDate, false)} – ${formatDate(d.windowEndDate)}`
+                      : formatDate(d.estimatedNextPeriodDate)}
+                  </p>
+                  {d.estimatedNextPeriodDaysUntil !== null && (
+                    <p className="text-[10px] text-primary font-medium">
+                      {d.estimatedNextPeriodDaysUntil === 0
+                        ? "Expected today"
+                        : d.estimatedNextPeriodDaysUntil < 0
+                        ? "Estimated date has passed; cycle continues"
+                        : `${d.estimatedNextPeriodDaysUntil} days away (estimate)`}
+                    </p>
+                  )}
+                </div>
+              )}
+              {d.averageCycleLength !== null && (
+                <div className="p-2.5 rounded-xl bg-secondary/20 border border-border/20 space-y-0.5">
+                  <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                    <TrendingUp className="size-3" />
+                    <span>Historical estimate</span>
+                  </div>
+                  <p className="text-xs font-semibold text-foreground">{d.averageCycleLength} days</p>
+                </div>
+              )}
+              {d.averagePeriodDuration !== null && (
+                <div className="p-2.5 rounded-xl bg-secondary/20 border border-border/20 space-y-0.5">
+                  <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                    <Clock className="size-3" />
+                    <span>Avg Period</span>
+                  </div>
+                  <p className="text-xs font-semibold text-foreground">{d.averagePeriodDuration} days</p>
+                </div>
+              )}
             </div>
-          )}
-          {d.averagePeriodDuration !== null && (
-            <div className="p-2.5 rounded-xl bg-secondary/20 border border-border/20 space-y-0.5">
-              <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                <Clock className="size-3" />
-                <span>Avg Period</span>
-              </div>
-              <p className="text-xs font-semibold text-foreground">{d.averagePeriodDuration} days</p>
-            </div>
-          )}
-        </div>
+          </>
+        )}
       </CardContent>
     </Card>
   )
@@ -624,7 +648,9 @@ function PeriodStatusCard({
                 <Droplets className="size-4" />
               </div>
               <div>
-                <CardTitle className="text-sm font-semibold">Period Status</CardTitle>
+                <CardTitle className="text-sm font-semibold">
+                  {partnerDisplayName ? `${partnerDisplayName}'s Period Status` : "Period Status"}
+                </CardTitle>
                 <CardDescription className="text-[11px]">Current period information</CardDescription>
               </div>
             </div>
@@ -760,7 +786,9 @@ function CyclePreferencesCard({
                 <Settings2 className="size-4" />
               </div>
               <div>
-                <CardTitle className="text-sm font-semibold">Cycle Preferences</CardTitle>
+                <CardTitle className="text-sm font-semibold">
+                  {partnerDisplayName ? `${partnerDisplayName}'s Cycle Preferences` : "Cycle Preferences"}
+                </CardTitle>
                 <CardDescription className="text-[11px]">Shared cycle configuration</CardDescription>
               </div>
             </div>
@@ -951,14 +979,14 @@ function EditCyclePreferencesDialog({
   )
 }
 
-function formatDate(dateStr: string): string {
+function formatDate(dateStr: string, includeYear: boolean = true): string {
   try {
     const [y, m, d] = dateStr.split("-").map(Number)
     const date = new Date(y, m - 1, d)
     return date.toLocaleDateString("en-US", {
       month: "short",
       day: "numeric",
-      year: "numeric",
+      ...(includeYear ? { year: "numeric" } : {}),
     })
   } catch {
     return dateStr

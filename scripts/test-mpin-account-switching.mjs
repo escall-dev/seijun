@@ -189,7 +189,8 @@ class SimulatedLoginForm {
     }
 
     // 3. Fetch MPIN configuration specifically for user.id
-    const isConfigured = await storageManager.fetchUserMpinConfiguration(user.id)
+    await storageManager.fetchUserMpinConfiguration(user.id)
+    const isDeviceConfigured = storageManager.hasMpin(user.id)
 
     const userObj = {
       id: user.id,
@@ -197,7 +198,7 @@ class SimulatedLoginForm {
       displayName: user.displayName,
     }
 
-    if (isConfigured) {
+    if (isDeviceConfigured) {
       this.currentUser = userObj
       mockStorage.setItem("seijun_remembered_user", JSON.stringify(userObj))
       this.viewMode = "returning-mpin"
@@ -371,6 +372,29 @@ await test("Test 9: Database profiles.has_mpin serves as source of truth", async
 
   const isConfigured = await storageManager.fetchUserMpinConfiguration(newUserId)
   assert.equal(isConfigured, true, "Must recognize DB configuration even without prior local verifier")
+})
+
+await test("Test 10: Fresh device with account has_mpin in DB routes authenticated user to device MPIN setup, not broken returning-mpin", async () => {
+  const freshUserId = "user-brand-new-999"
+  const freshUser = { id: freshUserId, email: "fresh@seijun.com", password: "Password123!", displayName: "Fresh Device User" }
+  mockUserRegistry[freshUser.email] = freshUser
+
+  const form = new SimulatedLoginForm()
+  const result = await form.handleSubmit(freshUser.email, freshUser.password, mockUserRegistry)
+
+  assert.equal(result.success, true)
+  assert.equal(form.viewMode, "setup-mpin", "Fresh device must prompt for device MPIN setup")
+  assert.equal(form.setupUserId, freshUserId)
+  assert.equal(form.currentUser, null)
+
+  // User sets up MPIN on this device
+  storageManager.saveMpin(freshUserId, "999999", true)
+  assert.equal(storageManager.hasMpin(freshUserId), true, "Device now has local MPIN verifier")
+
+  // Returning on this now-configured device shows returning-mpin
+  const returnForm = new SimulatedLoginForm()
+  await returnForm.handleSubmit(freshUser.email, freshUser.password, mockUserRegistry)
+  assert.equal(returnForm.viewMode, "returning-mpin", "Configured device now shows returning MPIN")
 })
 
 console.log("\n=================================================")

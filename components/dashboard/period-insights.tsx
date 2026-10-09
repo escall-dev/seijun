@@ -152,7 +152,7 @@ export function PeriodInsights({
                     ? `In ~${estimatedNextPeriod.daysUntil} days`
                     : estimatedNextPeriod.daysUntil === 0
                     ? "Expected today"
-                    : `~${Math.abs(estimatedNextPeriod.daysUntil)} days ago`}
+                    : `~${Math.abs(estimatedNextPeriod.daysUntil)} days past estimate`}
                 </span>
               </div>
 

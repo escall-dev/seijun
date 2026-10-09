@@ -215,15 +215,52 @@ function median(values: number[]): number {
   return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2
 }
 
-/** Recent completed start-to-start intervals; period end_date is not cycle end. */
+/**
+ * Calculates completed cycle lengths between consecutive valid cycle starts.
+ *
+ * Rules:
+ * 1. Cycle start dates must be <= referenceDate (today).
+ * 2. Deduplicates same-day cycle records.
+ * 3. Intervals between starts < 18 days are treated as non-cycle bleeding/spotting artifacts and excluded.
+ * 4. Maximum interval cap: 90 days (intervals > 90d represent amenorrhea/missed cycles, not typical cycle length).
+ * 5. Established history (>= 3 intervals): applies Median Absolute Deviation (MAD) outlier filtering.
+ * 6. Limited history (< 3 intervals): filters out sub-normal (< 21 days) or extreme (> 60 days) intervals
+ *    to prevent a single anomalous entry from dominating predictions.
+ */
 export function getCompletedCycleLengths(cycles: CycleRecord[], referenceDate = getTodayDateString()): number[] {
-  const starts = [...new Set(cycles.map(c => c.start_date).filter(date => date <= referenceDate))].sort()
-  const intervals = starts.slice(1).map((date, i) => calculateDaysBetween(starts[i], date))
-    .filter(days => days >= 18 && days <= 90).slice(-12)
-  if (intervals.length < 3) return intervals.filter(days => days <= 60)
-  const center = median(intervals)
-  const deviation = median(intervals.map(days => Math.abs(days - center)))
-  return intervals.filter(days => Math.abs(days - center) <= Math.max(7, deviation * 3))
+  if (!cycles || cycles.length === 0) return []
+
+  const starts = [...new Set(
+    cycles
+      .map((c) => c.start_date)
+      .filter((date) => isValidDateString(date) && date <= referenceDate)
+  )].sort()
+
+  if (starts.length < 2) return []
+
+  const intervals: number[] = []
+  for (let i = 0; i < starts.length - 1; i++) {
+    const days = calculateDaysBetween(starts[i], starts[i + 1])
+    if (days >= 18 && days <= 90) {
+      intervals.push(days)
+    }
+  }
+
+  const recentIntervals = intervals.slice(-12)
+  if (recentIntervals.length === 0) return []
+
+  if (recentIntervals.length < 3) {
+    // Limited history (< 3 intervals): only accept plausible normal cycles (21-60 days).
+    // Sub-normal intervals (< 21 days) are not permitted to dominate without established multi-cycle evidence.
+    return recentIntervals.filter((days) => days >= 21 && days <= 60)
+  }
+
+  const center = median(recentIntervals)
+  const deviation = median(recentIntervals.map((days) => Math.abs(days - center)))
+  const threshold = Math.max(7, deviation * 3)
+  const filtered = recentIntervals.filter((days) => Math.abs(days - center) <= threshold)
+
+  return filtered.length > 0 ? filtered : recentIntervals
 }
 
 export function getRecordedCycleEnd(cycle: CycleRecord, cycles: CycleRecord[]): string | null {
@@ -268,6 +305,7 @@ export interface EstimatedNextPeriod {
   daysUntil: number
   isFallback: boolean // True if using profile typical_cycle_length rather than completed history
   cycleLengthUsed: number
+  statusDescription: string
 }
 
 /**
@@ -293,7 +331,7 @@ export function calculateEstimatedNextPeriod(params: {
 
   const historicalLength = params.cycles ? calculateAverageCycleLength(params.cycles, referenceDateStr) : averageCycleLength
   const hasHistory = historicalLength !== null && historicalLength > 0
-  const cycleLength = hasHistory ? historicalLength! : typicalCycleLength
+  const cycleLength = hasHistory ? historicalLength! : (typicalCycleLength && typicalCycleLength >= 18 && typicalCycleLength <= 90 ? typicalCycleLength : 28)
 
   if (!cycleLength || !Number.isFinite(cycleLength) || cycleLength < 18 || cycleLength > 90) return null
 
@@ -304,12 +342,22 @@ export function calculateEstimatedNextPeriod(params: {
   const estimatedStartDate = formatDateToString(estimatedDate)
   const daysUntil = calculateDaysBetween(referenceDateStr, estimatedStartDate)
 
+  let statusDescription = ""
+  if (daysUntil > 0) {
+    statusDescription = `In ~${daysUntil} days`
+  } else if (daysUntil === 0) {
+    statusDescription = "Expected today"
+  } else {
+    statusDescription = `Estimated date has passed (~${Math.abs(daysUntil)} days ago) · cycle continues`
+  }
+
   return {
     ...getExpectedPeriodWindow(params.cycles ?? [], latestCycleStartDate, referenceDateStr),
     estimatedStartDate,
     daysUntil,
     isFallback: !hasHistory,
     cycleLengthUsed: cycleLength,
+    statusDescription,
   }
 }
 

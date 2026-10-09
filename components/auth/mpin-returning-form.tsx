@@ -27,6 +27,7 @@ export interface MpinReturningFormProps {
   onSuccess: () => void | Promise<void>
   onSwitchAccount: () => void
   onForgotMpin: () => void
+  onSetupDeviceMpin?: () => void
   version?: string
 }
 
@@ -45,6 +46,7 @@ export function MpinReturningForm({
   onSuccess,
   onSwitchAccount,
   onForgotMpin,
+  onSetupDeviceMpin,
   version,
 }: MpinReturningFormProps) {
   const initialAutofillPin = React.useMemo(() => {
@@ -222,10 +224,23 @@ export function MpinReturningForm({
         {error && (
           <div
             role="alert"
-            className="flex items-start gap-2.5 rounded-2xl border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive"
+            className="flex flex-col gap-2 rounded-2xl border border-destructive/20 bg-destructive/10 p-3.5 text-sm text-destructive"
           >
-            <AlertCircle className="size-4 shrink-0 mt-0.5" />
-            <span className="leading-snug">{error}</span>
+            <div className="flex items-start gap-2.5">
+              <AlertCircle className="size-4 shrink-0 mt-0.5" />
+              <span className="leading-snug">{error}</span>
+            </div>
+            {onSetupDeviceMpin && (error.toLowerCase().includes("no mpin configured") || error.toLowerCase().includes("no pin configured")) && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={onSetupDeviceMpin}
+                className="mt-1 h-8 text-xs font-semibold rounded-xl border-destructive/30 text-foreground hover:bg-destructive/15 self-start cursor-pointer"
+              >
+                Set up MPIN for this device
+              </Button>
+            )}
           </div>
         )}
 

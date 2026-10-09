@@ -122,7 +122,8 @@ export function LoginForm({ version }: LoginFormProps = {}) {
 
         if (user) {
           // Explicit loading state: fetch current authenticated user's MPIN configuration
-          const isConfigured = await fetchUserMpinConfiguration(user.id)
+          await fetchUserMpinConfiguration(user.id)
+          const isDeviceConfigured = hasMpin(user.id)
           if (!isMounted) return
 
           const userObj: MpinReturningUser = {
@@ -131,8 +132,8 @@ export function LoginForm({ version }: LoginFormProps = {}) {
             displayName: user.user_metadata?.display_name || null,
           }
 
-          if (isConfigured) {
-            // User already has an MPIN: show verification screen, never setup
+          if (isDeviceConfigured) {
+            // User already has an MPIN configured on THIS device: show verification screen
             setCurrentUser(userObj)
             setRememberedUser(userObj)
             await setMpinSetupPendingAction(false)
@@ -149,11 +150,13 @@ export function LoginForm({ version }: LoginFormProps = {}) {
             // Default returning experience: 6-digit MPIN keypad
             setViewMode("returning-mpin")
           } else {
-            // Authenticated user without MPIN -> First-time setup flow
+            // Authenticated user on a device with no local MPIN -> setup flow for this device
             setCurrentUser(null)
             setSetupUserId(user.id)
             setSetupUserEmail(user.email)
             setSetupDisplayName(user.user_metadata?.display_name || null)
+            setSessionLocked(false)
+            await setSessionLockAction(false)
             await setMpinSetupPendingAction(true)
             setViewMode("setup-mpin")
           }
@@ -298,11 +301,9 @@ export function LoginForm({ version }: LoginFormProps = {}) {
       // 2. Explicit loading state: fetch current user's MPIN configuration
       setViewMode("loading")
 
-      // 3. Database is source of truth, combined with local device configuration
-      let isConfigured = Boolean(result.user.hasMpin)
-      if (!isConfigured) {
-        isConfigured = await fetchUserMpinConfiguration(authenticatedId)
-      }
+      // 3. Inspect if THIS device has a local MPIN verifier for the authenticated user
+      await fetchUserMpinConfiguration(authenticatedId)
+      const isDeviceConfigured = hasMpin(authenticatedId)
 
       const userObj: MpinReturningUser = {
         id: authenticatedId,
@@ -310,10 +311,8 @@ export function LoginForm({ version }: LoginFormProps = {}) {
         displayName: result.user.displayName,
       }
 
-      if (isConfigured) {
-        // Requirement 5: If the current user already has an MPIN:
-        // - Show the MPIN verification/unlock screen.
-        // - Do not show the MPIN setup screen.
+      if (isDeviceConfigured) {
+        // Device already has an MPIN: show verification screen
         setCurrentUser(userObj)
         setRememberedUser(userObj)
         await setMpinSetupPendingAction(false)
@@ -328,8 +327,9 @@ export function LoginForm({ version }: LoginFormProps = {}) {
 
         setViewMode("returning-mpin")
       } else {
-        // Requirement 6: If the current user has no MPIN:
-        // - Show the MPIN setup flow.
+        // Authenticated user on fresh / second device: prompt to setup MPIN for this device
+        setSessionLocked(false)
+        await setSessionLockAction(false)
         await setMpinSetupPendingAction(true)
         setSetupUserId(authenticatedId)
         setSetupUserEmail(result.user.email)
@@ -362,6 +362,12 @@ export function LoginForm({ version }: LoginFormProps = {}) {
         onSuccess={handleMpinUnlockSuccess}
         onSwitchAccount={handleSwitchAccount}
         onForgotMpin={handleForgotMpin}
+        onSetupDeviceMpin={() => {
+          setSetupUserId(currentUser.id)
+          setSetupUserEmail(currentUser.email)
+          setSetupDisplayName(currentUser.displayName ?? null)
+          setViewMode("setup-mpin")
+        }}
         version={version}
       />
     )

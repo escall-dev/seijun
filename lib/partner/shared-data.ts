@@ -5,6 +5,7 @@ import {
   type AuthorizationDenialReason,
 } from "./authorization"
 import type { CycleRecord, PeriodDayRecord } from "@/app/actions/cycles"
+import { calculateDaysBetween } from "@/lib/calculations/cycle-calculations"
 
 /**
  * Seijun Phase 19 Batch 3 — Steps 12–14
@@ -51,6 +52,9 @@ export interface SharedCycleEstimate {
   averagePeriodDuration: number | null
   currentCycleStartDate: string | null
   cycleProgress: number | null
+  windowStartDate?: string | null
+  windowEndDate?: string | null
+  isFallback?: boolean
 }
 
 /**
@@ -119,7 +123,7 @@ export async function getSharedCycleEstimates(
 
     const cycles: CycleRecord[] = cyclesRaw.map((cycle, index) => {
       const nextCycle = cyclesRaw[index + 1]
-      const calculatedLength = nextCycle ? daysBetween(cycle.start_date, nextCycle.start_date) : null
+      const calculatedLength = nextCycle ? calculateDaysBetween(cycle.start_date, nextCycle.start_date) : null
       const daysList = daysByCycle.get(cycle.id) || []
       return {
         ...cycle,
@@ -172,6 +176,9 @@ export async function getSharedCycleEstimates(
         averagePeriodDuration: avgPeriodDuration,
         currentCycleStartDate: currentCycle?.start_date ?? null,
         cycleProgress: cycleProgressPercent,
+        windowStartDate: estimatedNextPeriod?.windowStartDate ?? null,
+        windowEndDate: estimatedNextPeriod?.windowEndDate ?? null,
+        isFallback: estimatedNextPeriod?.isFallback ?? false,
       },
     }
   } catch {
@@ -277,9 +284,9 @@ export async function getSharedPeriodStatus(
       lastPeriodStartDate = latestCycle.start_date
       lastPeriodEndDate = latestCycle.end_date
       lastPeriodDuration = latestCycle.end_date
-        ? latestCycle.period_duration || daysBetween(latestCycle.start_date, latestCycle.end_date) + 1
+        ? latestCycle.period_duration || calculateDaysBetween(latestCycle.start_date, latestCycle.end_date) + 1
         : null
-      if (isOnPeriod) currentPeriodDay = daysBetween(latestCycle.start_date, todayStr) + 1
+      if (isOnPeriod) currentPeriodDay = calculateDaysBetween(latestCycle.start_date, todayStr) + 1
     }
 
     return {
@@ -443,12 +450,3 @@ export async function getSharedDailyNotes(
   }
 }
 
-// ─── Utility ─────────────────────────────────────────────────────────────────
-
-function daysBetween(earlierStr: string, laterStr: string): number {
-  const [ey, em, ed] = earlierStr.split("-").map(Number)
-  const [ly, lm, ld] = laterStr.split("-").map(Number)
-  const earlier = new Date(ey, em - 1, ed)
-  const later = new Date(ly, lm - 1, ld)
-  return Math.round((later.getTime() - earlier.getTime()) / (1000 * 60 * 60 * 24))
-}

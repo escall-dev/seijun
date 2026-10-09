@@ -73,7 +73,7 @@ export function setSessionLocked(locked: boolean): void {
 }
 
 /**
- * Check if an MPIN record exists for the given user ID.
+ * Check if an MPIN record exists on this device for the given user ID.
  */
 export function hasMpin(userId: string): boolean {
   if (typeof window === "undefined" || !userId) return false
@@ -83,6 +83,13 @@ export function hasMpin(userId: string): boolean {
   } catch {
     return false
   }
+}
+
+/**
+ * Explicit alias to check device-local enrollment vs account-level profile state.
+ */
+export function hasDeviceMpin(userId: string): boolean {
+  return hasMpin(userId)
 }
 
 /**
