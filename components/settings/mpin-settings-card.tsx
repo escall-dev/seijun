@@ -8,23 +8,21 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { MpinInput } from "@/components/auth/mpin-input"
 import { createClient } from "@/lib/supabase/client"
 import { forgotMpinAction } from "@/app/actions/auth"
+import { changeMpinAction } from "@/app/actions/mpin"
 import {
   verifyMpin,
   saveMpin,
   clearMpin,
   isRememberDeviceEnabled,
   setRememberDeviceEnabled,
-  isAutoUnlockEnabled,
-  setAutoUnlockEnabled,
   fetchUserMpinConfiguration,
 } from "@/lib/auth/mpin-storage"
-import { KeyRound, ShieldCheck, Check, AlertCircle, Loader2, Smartphone, Zap } from "lucide-react"
+import { KeyRound, ShieldCheck, Check, AlertCircle, Loader2, Smartphone } from "lucide-react"
 
 export function MpinSettingsCard() {
   const [userId, setUserId] = React.useState<string | null>(null)
   const [isConfigured, setIsConfigured] = React.useState<boolean>(false)
   const [rememberDevice, setRememberDevice] = React.useState<boolean>(true)
-  const [autoUnlock, setAutoUnlock] = React.useState<boolean>(false)
 
   // Change MPIN Modal state
   const [isChangeModalOpen, setIsChangeModalOpen] = React.useState<boolean>(false)
@@ -56,7 +54,6 @@ export function MpinSettingsCard() {
         if (!isMounted) return
         setIsConfigured(configured)
         setRememberDevice(isRememberDeviceEnabled(user.id))
-        setAutoUnlock(isAutoUnlockEnabled(user.id))
       } catch {
         // Ignore error
       }
@@ -81,15 +78,6 @@ export function MpinSettingsCard() {
     if (userId) {
       setRememberDeviceEnabled(userId, checked)
       setSuccessToast(checked ? "Device trust enabled." : "Device trust disabled.")
-    }
-  }
-
-  // Handle Automatic Unlock toggle
-  const handleToggleAutoUnlock = (checked: boolean) => {
-    setAutoUnlock(checked)
-    if (userId) {
-      setAutoUnlockEnabled(userId, checked)
-      setSuccessToast(checked ? "Automatic unlock enabled." : "Automatic unlock disabled (manual MPIN entry required).")
     }
   }
 
@@ -145,7 +133,12 @@ export function MpinSettingsCard() {
     setModalError(null)
 
     try {
-      await saveMpin(userId, pin, rememberDevice)
+      if (isConfigured) {
+        const result = await changeMpinAction(currentMpin, pin)
+        if (!result.success) throw new Error("Unable to change MPIN. Please verify your current MPIN again.")
+      } else {
+        await saveMpin(userId, pin, rememberDevice)
+      }
       setIsConfigured(true)
       setIsChangeModalOpen(false)
       setSuccessToast("Your 6-digit MPIN has been updated successfully.")
@@ -207,8 +200,8 @@ export function MpinSettingsCard() {
                 <span className="font-medium text-foreground block">6-Digit MPIN Status</span>
                 <span className="text-xs text-muted-foreground">
                   {isConfigured
-                    ? "Cryptographically protected on this device with Web Crypto PBKDF2"
-                    : "No MPIN configured on this device yet"}
+                    ? "Account MPIN is enabled across your devices"
+                    : "No account MPIN configured yet"}
                 </span>
               </div>
             </div>
@@ -259,32 +252,6 @@ export function MpinSettingsCard() {
               type="checkbox"
               checked={rememberDevice}
               onChange={(e) => handleToggleRememberDevice(e.target.checked)}
-              className="size-4.5 rounded border-border text-primary focus:ring-primary/20 accent-primary cursor-pointer shrink-0 ml-3"
-            />
-          </div>
-
-          {/* Automatic Unlock Toggle */}
-          <div className="flex items-center justify-between p-3.5 rounded-xl bg-secondary/30 border border-border/40">
-            <div className="flex items-start gap-3">
-              <Zap className="size-4.5 text-primary shrink-0 mt-0.5" />
-              <div>
-                <label
-                  htmlFor="autoUnlockToggle"
-                  className="font-medium text-foreground text-sm block cursor-pointer select-none"
-                >
-                  Automatic Unlock
-                </label>
-                <p className="text-xs text-muted-foreground leading-relaxed">
-                  Automatically unlock your session on return without prompting for the 6-digit MPIN.
-                </p>
-              </div>
-            </div>
-
-            <input
-              id="autoUnlockToggle"
-              type="checkbox"
-              checked={autoUnlock}
-              onChange={(e) => handleToggleAutoUnlock(e.target.checked)}
               className="size-4.5 rounded border-border text-primary focus:ring-primary/20 accent-primary cursor-pointer shrink-0 ml-3"
             />
           </div>
@@ -434,7 +401,7 @@ export function MpinSettingsCard() {
               Reset MPIN & Sign Out?
             </DialogTitle>
             <DialogDescription className="text-xs text-muted-foreground leading-relaxed pt-1">
-              Resetting your MPIN removes the local cryptographic credential from this device. You will be signed out and will need to log in with your email and password to create a new MPIN.
+              You will sign in again, confirm your account password, and choose a new MPIN for all devices.
             </DialogDescription>
           </DialogHeader>
 

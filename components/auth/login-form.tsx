@@ -4,16 +4,13 @@ import * as React from "react"
 import Link from "next/link"
 import { useSearchParams, useRouter } from "next/navigation"
 import { loginAction, setSessionLockAction, setMpinSetupPendingAction, type AuthActionResult } from "@/app/actions/auth"
+import { getMpinStatusAction, lockMpinAction } from "@/app/actions/mpin"
 import { createClient } from "@/lib/supabase/client"
 import {
-  hasMpin,
-  isAutoUnlockEnabled,
   setSessionLocked,
-  clearMpin,
-  getRememberedUser,
   setRememberedUser,
   clearRememberedUser,
-  fetchUserMpinConfiguration,
+  retireLegacyMpin,
 } from "@/lib/auth/mpin-storage"
 import { MpinReturningForm, type MpinReturningUser } from "@/components/auth/mpin-returning-form"
 import { MpinSetupForm } from "@/components/auth/mpin-setup-form"
@@ -61,7 +58,10 @@ function formatDisplayName(name?: string | null): string {
 export function LoginForm({ version }: LoginFormProps = {}) {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const redirectTarget = searchParams.get("redirect") || "/dashboard"
+  const requestedRedirect = searchParams.get("redirect")
+  const redirectTarget = requestedRedirect?.startsWith("/") && !requestedRedirect.startsWith("//")
+    && !requestedRedirect.startsWith("/login") ? requestedRedirect : "/dashboard"
+  const postMpinTargetRef = React.useRef(redirectTarget)
   const urlError = searchParams.get("error")
   const urlVerified = searchParams.get("verified") === "true"
   const urlResetMpin = searchParams.get("reset_mpin") === "true"
@@ -72,6 +72,7 @@ export function LoginForm({ version }: LoginFormProps = {}) {
   const [setupUserId, setSetupUserId] = React.useState<string | null>(null)
   const [setupUserEmail, setSetupUserEmail] = React.useState<string | undefined>(undefined)
   const [setupDisplayName, setSetupDisplayName] = React.useState<string | null>(null)
+  const [recoveryMode, setRecoveryMode] = React.useState(false)
 
   const [showPassword, setShowPassword] = React.useState(false)
   const [rememberMeChecked, setRememberMeChecked] = React.useState(true)
@@ -122,8 +123,8 @@ export function LoginForm({ version }: LoginFormProps = {}) {
 
         if (user) {
           // Explicit loading state: fetch current authenticated user's MPIN configuration
-          await fetchUserMpinConfiguration(user.id)
-          const isDeviceConfigured = hasMpin(user.id)
+          const status = await getMpinStatusAction()
+          if (!status) throw new Error("Unable to check MPIN status")
           if (!isMounted) return
 
           const userObj: MpinReturningUser = {
@@ -132,25 +133,21 @@ export function LoginForm({ version }: LoginFormProps = {}) {
             displayName: user.user_metadata?.display_name || null,
           }
 
-          if (isDeviceConfigured) {
-            // User already has an MPIN configured on THIS device: show verification screen
+          if (status.verified) {
+            router.push(status.onboardingCompleted ? redirectTarget : "/onboarding")
+            router.refresh()
+            return
+          }
+          if (status.configured) {
+            postMpinTargetRef.current = status.onboardingCompleted ? redirectTarget : "/onboarding"
+            retireLegacyMpin(user.id)
             setCurrentUser(userObj)
             setRememberedUser(userObj)
             await setMpinSetupPendingAction(false)
-
-            // Check automatic unlock preference
-            if (isAutoUnlockEnabled(user.id)) {
-              setSessionLocked(false)
-              await setSessionLockAction(false)
-              router.push(redirectTarget)
-              router.refresh()
-              return
-            }
-
-            // Default returning experience: 6-digit MPIN keypad
             setViewMode("returning-mpin")
           } else {
-            // Authenticated user on a device with no local MPIN -> setup flow for this device
+            postMpinTargetRef.current = status.onboardingCompleted ? redirectTarget : "/onboarding"
+            // No trusted account verifier exists, including legacy local-only users.
             setCurrentUser(null)
             setSetupUserId(user.id)
             setSetupUserEmail(user.email)
@@ -161,17 +158,11 @@ export function LoginForm({ version }: LoginFormProps = {}) {
             setViewMode("setup-mpin")
           }
         } else {
-          // No active Supabase session: check if device has remembered user with MPIN
-          const remembered = getRememberedUser()
-          if (remembered && hasMpin(remembered.id)) {
-            setCurrentUser(remembered)
-            setViewMode("returning-mpin")
-          } else {
-            setViewMode("email-password")
-          }
+          setViewMode("email-password")
         }
       } catch {
         if (isMounted) {
+          setFormError("Unable to check MPIN status. Please try again.")
           setViewMode("email-password")
         }
       }
@@ -203,13 +194,14 @@ export function LoginForm({ version }: LoginFormProps = {}) {
       // Ignore
     }
 
-    router.push(redirectTarget)
+    router.push(postMpinTargetRef.current)
     router.refresh()
-  }, [redirectTarget, router])
+  }, [router])
 
   // 3. Handle Switch Account
   const handleSwitchAccount = React.useCallback(async () => {
     try {
+      await lockMpinAction()
       const supabase = createClient()
       await supabase.auth.signOut()
     } catch {
@@ -231,25 +223,13 @@ export function LoginForm({ version }: LoginFormProps = {}) {
 
   // 4. Handle Forgot MPIN
   const handleForgotMpin = React.useCallback(async () => {
-    if (currentUser?.id) {
-      clearMpin(currentUser.id)
-    }
-    clearRememberedUser()
-    try {
-      const supabase = createClient()
-      await supabase.auth.signOut()
-    } catch {
-      // Ignore
-    }
-    setSessionLocked(false)
-    await setSessionLockAction(false)
-    await setMpinSetupPendingAction(false)
+    if (!currentUser) return
+    setRecoveryMode(true)
+    setSetupUserId(currentUser.id)
+    setSetupUserEmail(currentUser.email)
+    setSetupDisplayName(currentUser.displayName || null)
     setCurrentUser(null)
-    setSetupUserId(null)
-    setSetupUserEmail(undefined)
-    setSetupDisplayName(null)
-    setViewMode("email-password")
-    setFormError("Your local MPIN has been reset. Please sign in with your email and password to create a new MPIN.")
+    setViewMode("setup-mpin")
   }, [currentUser])
 
   // 5. Handle First-Time MPIN Setup Success
@@ -257,9 +237,9 @@ export function LoginForm({ version }: LoginFormProps = {}) {
     setSessionLocked(false)
     await setSessionLockAction(false)
     await setMpinSetupPendingAction(false)
-    router.push(redirectTarget)
+    router.push(postMpinTargetRef.current)
     router.refresh()
-  }, [redirectTarget, router])
+  }, [router])
 
   // 6. Handle Email + Password Submission
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -302,8 +282,9 @@ export function LoginForm({ version }: LoginFormProps = {}) {
       setViewMode("loading")
 
       // 3. Inspect if THIS device has a local MPIN verifier for the authenticated user
-      await fetchUserMpinConfiguration(authenticatedId)
-      const isDeviceConfigured = hasMpin(authenticatedId)
+      const status = await getMpinStatusAction()
+      if (!status) throw new Error("Unable to check MPIN status")
+      postMpinTargetRef.current = result.redirectUrl || redirectTarget
 
       const userObj: MpinReturningUser = {
         id: authenticatedId,
@@ -311,23 +292,15 @@ export function LoginForm({ version }: LoginFormProps = {}) {
         displayName: result.user.displayName,
       }
 
-      if (isDeviceConfigured) {
-        // Device already has an MPIN: show verification screen
+      if (status.configured && !urlResetMpin) {
+        retireLegacyMpin(authenticatedId)
         setCurrentUser(userObj)
         setRememberedUser(userObj)
         await setMpinSetupPendingAction(false)
-
-        if (isAutoUnlockEnabled(authenticatedId)) {
-          setSessionLocked(false)
-          await setSessionLockAction(false)
-          router.push(result.redirectUrl || redirectTarget)
-          router.refresh()
-          return
-        }
-
         setViewMode("returning-mpin")
       } else {
-        // Authenticated user on fresh / second device: prompt to setup MPIN for this device
+        // Initial enrollment or legacy re-enrollment after credential login.
+        setRecoveryMode(status.configured && urlResetMpin)
         setSessionLocked(false)
         await setSessionLockAction(false)
         await setMpinSetupPendingAction(true)
@@ -362,12 +335,6 @@ export function LoginForm({ version }: LoginFormProps = {}) {
         onSuccess={handleMpinUnlockSuccess}
         onSwitchAccount={handleSwitchAccount}
         onForgotMpin={handleForgotMpin}
-        onSetupDeviceMpin={() => {
-          setSetupUserId(currentUser.id)
-          setSetupUserEmail(currentUser.email)
-          setSetupDisplayName(currentUser.displayName ?? null)
-          setViewMode("setup-mpin")
-        }}
         version={version}
       />
     )
@@ -379,7 +346,9 @@ export function LoginForm({ version }: LoginFormProps = {}) {
         userId={setupUserId}
         userEmail={setupUserEmail}
         displayName={setupDisplayName}
+        recovery={recoveryMode}
         onSuccess={handleMpinSetupSuccess}
+        onCancel={handleSwitchAccount}
       />
     )
   }

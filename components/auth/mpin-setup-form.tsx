@@ -4,6 +4,7 @@ import * as React from "react"
 import { RediLogo } from "@/components/brand/redi-logo"
 import { MpinInput } from "@/components/auth/mpin-input"
 import { saveMpin } from "@/lib/auth/mpin-storage"
+import { recoverMpinAction } from "@/app/actions/mpin"
 import { Button } from "@/components/ui/button"
 import { Shield, AlertCircle, ArrowLeft, Loader2 } from "lucide-react"
 
@@ -13,6 +14,7 @@ export interface MpinSetupFormProps {
   displayName?: string | null
   onSuccess: () => void
   onCancel?: () => void
+  recovery?: boolean
 }
 
 export function MpinSetupForm({
@@ -21,6 +23,7 @@ export function MpinSetupForm({
   displayName,
   onSuccess,
   onCancel,
+  recovery = false,
 }: MpinSetupFormProps) {
   const [step, setStep] = React.useState<"create" | "confirm">("create")
   const [mpin, setMpin] = React.useState("")
@@ -28,6 +31,7 @@ export function MpinSetupForm({
   const [rememberDevice, setRememberDevice] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
   const [isSaving, setIsSaving] = React.useState(false)
+  const [password, setPassword] = React.useState("")
 
   const handleCreateComplete = (val: string) => {
     if (val.length === 6) {
@@ -49,7 +53,12 @@ export function MpinSetupForm({
     setError(null)
 
     try {
-      await saveMpin(userId, val, rememberDevice, { email: userEmail, displayName })
+      if (recovery) {
+        const result = await recoverMpinAction(password, val)
+        if (!result.success) throw new Error("Recovery failed. Check your password and try again.")
+      } else {
+        await saveMpin(userId, val, rememberDevice, { email: userEmail, displayName })
+      }
       onSuccess()
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Failed to save MPIN. Please try again.")
@@ -78,11 +87,11 @@ export function MpinSetupForm({
 
         <div className="space-y-1">
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
-            {step === "create" ? "Create your 6-digit MPIN" : "Confirm your 6-digit MPIN"}
+            {step === "create" ? (recovery ? "Reset your account MPIN" : "Set your account MPIN") : "Confirm your 6-digit MPIN"}
           </h1>
           <p className="text-sm text-muted-foreground leading-relaxed">
             {step === "create"
-              ? "Set an MPIN for fast and secure access on this device."
+              ? (recovery ? "Confirm your account password to replace your MPIN on all devices." : "Use the same 6 digits you used before if this account had a device-only MPIN.")
               : "Re-enter your 6 digits to verify."}
           </p>
         </div>
@@ -145,6 +154,14 @@ export function MpinSetupForm({
           {/* Step 2: Confirm */}
           {step === "confirm" && (
             <div className="space-y-5">
+              {recovery && (
+                <label className="block text-sm font-medium">
+                  Account password
+                  <input type="password" autoComplete="current-password" value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                    className="mt-2 w-full rounded-xl border border-border bg-background px-3 py-2" required />
+                </label>
+              )}
               <MpinInput
                 value={confirmMpin}
                 onChange={(val) => {
@@ -173,7 +190,7 @@ export function MpinSetupForm({
 
                 <Button
                   type="button"
-                  disabled={confirmMpin.length !== 6 || isSaving}
+                  disabled={confirmMpin.length !== 6 || isSaving || (recovery && !password)}
                   onClick={() => handleConfirmComplete(confirmMpin)}
                   className="flex-1 h-11 text-sm font-medium rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 shadow-redi-sm transition-all cursor-pointer"
                 >
@@ -196,6 +213,12 @@ export function MpinSetupForm({
           <span>Stored as a cryptographic verifier; never in plaintext</span>
         </div>
       </div>
+      {onCancel && (
+        <button type="button" onClick={onCancel}
+          className="mx-auto block text-sm font-medium text-primary hover:underline">
+          Sign in again or switch account
+        </button>
+      )}
     </div>
   )
 }

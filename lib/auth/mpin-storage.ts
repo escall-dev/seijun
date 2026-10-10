@@ -5,8 +5,7 @@
  * Manages lockout rates, failed attempts, Remember Device, and Auto-Unlock states.
  */
 
-import { generateSalt, hashMpin, timingSafeEqual } from "./mpin-crypto"
-import { createClient } from "@/lib/supabase/client"
+import { enrollMpinAction, getMpinStatusAction, verifyMpinAction } from "@/app/actions/mpin"
 
 export interface MpinRecord {
   salt: string
@@ -115,23 +114,13 @@ export async function saveMpin(
   rememberDevice: boolean = true,
   userProfile?: { email?: string; displayName?: string | null }
 ): Promise<void> {
-  if (typeof window === "undefined" || !userId) return
-
-  const salt = generateSalt(16)
-  const verifier = await hashMpin(mpin, salt)
-  const now = new Date().toISOString()
-
-  const record: MpinRecord = {
-    salt,
-    verifier,
-    createdAt: now,
-    lastChangedAt: now,
-  }
-
-  localStorage.setItem(getKey("verifier", userId), JSON.stringify(record))
+  if (typeof window === "undefined" || !userId) throw new Error("Authentication required")
+  const result = await enrollMpinAction(mpin)
+  if (!result.success) throw new Error("MPIN setup failed. Sign in again to retry, or enter the PIN already set on another device.")
+  clearLegacySecrets(userId)
   localStorage.setItem(getKey("remember", userId), rememberDevice ? "true" : "false")
   if (rememberDevice) {
-    saveAutofillMpin(userId, mpin)
+    // Device preference never stores the PIN itself.
   }
   if (userProfile) {
     setRememberedUser({
@@ -141,18 +130,7 @@ export async function saveMpin(
     })
   }
   resetFailedAttempts(userId)
-  setSessionLocked(false)
   setAccountMpinConfigured(userId, true)
-
-  try {
-    const supabase = createClient()
-    await supabase
-      .from("profiles")
-      .update({ has_mpin: true, updated_at: new Date().toISOString() })
-      .eq("user_id", userId)
-  } catch {
-    // Non-blocking in case of offline/network issues; local verifier is persisted
-  }
 }
 
 /**
@@ -223,65 +201,12 @@ export async function verifyMpin(
   userId: string,
   enteredMpin: string
 ): Promise<VerifyMpinResult> {
-  const attemptState = getAttemptState(userId)
-
-  // 1. Check if currently locked out
-  if (attemptState.lockedUntil && Date.now() < attemptState.lockedUntil) {
-    const remainingSeconds = Math.ceil((attemptState.lockedUntil - Date.now()) / 1000)
-    return {
-      success: false,
-      isLockedOut: true,
-      lockedSecondsRemaining: remainingSeconds,
-      error: `Too many failed attempts. Please try again in ${remainingSeconds}s.`,
-    }
-  }
-
-  // 2. Validate format
-  if (!enteredMpin || enteredMpin.length !== 6 || !/^\d{6}$/.test(enteredMpin)) {
-    return {
-      success: false,
-      error: "Please enter a valid 6-digit MPIN.",
-    }
-  }
-
-  // 3. Fetch stored record
-  const record = getMpinRecord(userId)
-  if (!record) {
-    return {
-      success: false,
-      error: "No MPIN configured for this account on this device.",
-    }
-  }
-
-  // 4. Compute PBKDF2 hash of entered MPIN with stored salt
-  const enteredVerifier = await hashMpin(enteredMpin, record.salt)
-  const isMatch = timingSafeEqual(enteredVerifier, record.verifier)
-
-  if (isMatch) {
-    resetFailedAttempts(userId)
-    setSessionLocked(false)
-    return { success: true }
-  }
-
-  // 5. Handle failure
-  const updatedAttempts = recordFailedAttempt(userId)
-  if (updatedAttempts.lockedUntil) {
-    const remainingSeconds = Math.ceil(LOCKOUT_DURATION_MS / 1000)
-    return {
-      success: false,
-      isLockedOut: true,
-      lockedSecondsRemaining: remainingSeconds,
-      remainingAttempts: 0,
-      error: `Incorrect MPIN. Maximum attempts reached. Locked for ${remainingSeconds}s.`,
-    }
-  }
-
-  const remaining = MAX_FAILED_ATTEMPTS - updatedAttempts.count
-  return {
-    success: false,
-    remainingAttempts: remaining,
-    error: `Incorrect MPIN. ${remaining} ${remaining === 1 ? "attempt" : "attempts"} remaining.`,
-  }
+  if (!userId) return { success: false, error: "Authentication required." }
+  const result = await verifyMpinAction(enteredMpin)
+  return result.success
+    ? { success: true }
+    : { success: false, isLockedOut: result.locked, lockedSecondsRemaining: result.locked ? 900 : undefined,
+        error: result.locked ? "Too many attempts. Try again later." : "Unable to verify MPIN." }
 }
 
 /**
@@ -310,22 +235,13 @@ export function setRememberDeviceEnabled(userId: string, enabled: boolean): void
  * Automatic Unlock preference
  */
 export function isAutoUnlockEnabled(userId: string): boolean {
-  if (typeof window === "undefined" || !userId) return false
-  try {
-    const val = localStorage.getItem(getKey("autounlock", userId))
-    return val === "true"
-  } catch {
-    return false
-  }
+  void userId
+  return false
 }
 
 export function setAutoUnlockEnabled(userId: string, enabled: boolean): void {
-  if (typeof window === "undefined" || !userId) return
-  try {
-    localStorage.setItem(getKey("autounlock", userId), enabled ? "true" : "false")
-  } catch {
-    // Ignore storage errors
-  }
+  void userId
+  void enabled
 }
 
 export interface RememberedUser {
@@ -395,44 +311,11 @@ export function getAccountMpinConfigured(userId: string): boolean | null {
  * Also checks local device verifier storage.
  */
 export async function fetchUserMpinConfiguration(userId: string): Promise<boolean> {
-  if (!userId) return false
-
-  // Check local verifier for immediate signal on this device
-  const localConfigured = hasMpin(userId)
-
-  try {
-    const supabase = createClient()
-    const { data: profile, error } = await supabase
-      .from("profiles")
-      .select("has_mpin")
-      .eq("user_id", userId)
-      .maybeSingle()
-
-    if (!error && profile) {
-      const dbConfigured = Boolean(profile.has_mpin)
-      // If local has verifier but DB is not yet marked true, sync to DB
-      if (localConfigured && !dbConfigured) {
-        try {
-          await supabase
-            .from("profiles")
-            .update({ has_mpin: true, updated_at: new Date().toISOString() })
-            .eq("user_id", userId)
-        } catch {
-          // Ignore sync failure
-        }
-        setAccountMpinConfigured(userId, true)
-        return true
-      }
-      const finalConfigured = dbConfigured || localConfigured
-      setAccountMpinConfigured(userId, finalConfigured)
-      return finalConfigured
-    }
-  } catch {
-    // Network / offline fallback: rely on local device storage
-  }
-
-  setAccountMpinConfigured(userId, localConfigured)
-  return localConfigured
+  if (!userId) throw new Error("Authentication required")
+  const status = await getMpinStatusAction()
+  if (!status) throw new Error("Unable to check MPIN status")
+  setAccountMpinConfigured(userId, status.configured)
+  return status.configured
 }
 
 /**
@@ -465,41 +348,13 @@ export function setMpinRememberMeEnabled(userId: string, enabled: boolean): void
 }
 
 export function saveAutofillMpin(userId: string, mpin: string): void {
-  if (typeof window === "undefined" || !userId || !mpin || mpin.length !== 6) return
-  try {
-    const encoded =
-      typeof btoa !== "undefined"
-        ? btoa(`seijun_${userId}_${mpin}`)
-        : Buffer.from(`seijun_${userId}_${mpin}`).toString("base64")
-    localStorage.setItem(getKey("autofill", userId), encoded)
-    localStorage.setItem(getKey("remember_mpin", userId), "true")
-  } catch {
-    // Ignore storage errors
-  }
+  void mpin
+  clearAutofillMpin(userId)
 }
 
 export function getAutofillMpin(userId?: string): string | null {
-  if (typeof window === "undefined" || !userId) return null
-  try {
-    const raw = localStorage.getItem(getKey("autofill", userId))
-    if (!raw) return null
-
-    const decoded =
-      typeof atob !== "undefined"
-        ? atob(raw)
-        : Buffer.from(raw, "base64").toString("utf-8")
-    const parts = decoded.split("_")
-    const pin = parts[parts.length - 1]
-    if (pin && /^\d{6}$/.test(pin)) {
-      return pin
-    }
-    if (/^\d{6}$/.test(decoded)) {
-      return decoded
-    }
-    return null
-  } catch {
-    return null
-  }
+  if (userId && typeof window !== "undefined") clearAutofillMpin(userId)
+  return null
 }
 
 export function clearAutofillMpin(userId: string): void {
@@ -528,19 +383,20 @@ export function clearMpin(userId: string): void {
     clearRememberedUser()
     setSessionLocked(false)
 
-    try {
-      const supabase = createClient()
-      void supabase
-        .from("profiles")
-        .update({ has_mpin: false, updated_at: new Date().toISOString() })
-        .eq("user_id", userId)
-        .then(() => {}, () => {})
-    } catch {
-      // Ignore
-    }
   } catch {
     // Ignore storage errors
   }
+}
+
+function clearLegacySecrets(userId: string): void {
+  if (typeof window === "undefined") return
+  for (const suffix of ["verifier", "autofill", "autounlock", "attempts"]) {
+    localStorage.removeItem(getKey(suffix, userId))
+  }
+}
+
+export function retireLegacyMpin(userId: string): void {
+  clearLegacySecrets(userId)
 }
 
 /**

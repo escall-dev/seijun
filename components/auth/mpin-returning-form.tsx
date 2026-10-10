@@ -27,7 +27,6 @@ export interface MpinReturningFormProps {
   onSuccess: () => void | Promise<void>
   onSwitchAccount: () => void
   onForgotMpin: () => void
-  onSetupDeviceMpin?: () => void
   version?: string
 }
 
@@ -46,7 +45,6 @@ export function MpinReturningForm({
   onSuccess,
   onSwitchAccount,
   onForgotMpin,
-  onSetupDeviceMpin,
   version,
 }: MpinReturningFormProps) {
   const initialAutofillPin = React.useMemo(() => {
@@ -230,17 +228,6 @@ export function MpinReturningForm({
               <AlertCircle className="size-4 shrink-0 mt-0.5" />
               <span className="leading-snug">{error}</span>
             </div>
-            {onSetupDeviceMpin && (error.toLowerCase().includes("no mpin configured") || error.toLowerCase().includes("no pin configured")) && (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={onSetupDeviceMpin}
-                className="mt-1 h-8 text-xs font-semibold rounded-xl border-destructive/30 text-foreground hover:bg-destructive/15 self-start cursor-pointer"
-              >
-                Set up MPIN for this device
-              </Button>
-            )}
           </div>
         )}
 
@@ -278,7 +265,7 @@ export function MpinReturningForm({
                 disabled={isVerifying}
                 className="size-4 rounded border-border text-primary focus:ring-primary/20 accent-primary cursor-pointer transition-all"
               />
-              <span className="text-xs sm:text-sm font-medium">Remember me</span>
+              <span className="text-xs sm:text-sm font-medium">Remember account</span>
             </label>
 
             <button

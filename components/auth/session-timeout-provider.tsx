@@ -4,7 +4,7 @@ import * as React from "react"
 import { usePathname, useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { logoutAction, setSessionLockAction } from "@/app/actions/auth"
-import { hasMpin, setSessionLocked } from "@/lib/auth/mpin-storage"
+import { fetchUserMpinConfiguration, setSessionLocked } from "@/lib/auth/mpin-storage"
 import {
   INACTIVITY_TIMEOUT_MS,
   INACTIVITY_WARNING_MS,
@@ -110,7 +110,7 @@ export function SessionTimeoutProvider({ children }: SessionTimeoutProviderProps
     setIsWarningOpen(false)
 
     const userId = currentUserIdRef.current
-    if (userId && hasMpin(userId)) {
+    if (userId && await fetchUserMpinConfiguration(userId).catch(() => false)) {
       // User has MPIN: Lock session to MPIN unlock screen, preserving Supabase session
       setSessionLocked(true)
       await setSessionLockAction(true)

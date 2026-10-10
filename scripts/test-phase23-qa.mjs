@@ -46,30 +46,18 @@ console.log("  ✔ Application version exactly 1.22.0 (v1.22.0) preserved.\n")
 
 // ─── 2. Priority 1: Multi-Device MPIN Logic ───────────────────────────────────
 
-console.log("Section 2: Priority 1 — Cross-Device MPIN & Device-Local Isolation")
+console.log("Section 2: Priority 1 — Cross-Device Account MPIN")
 const mpinStorageSrc = fs.readFileSync("lib/auth/mpin-storage.ts", "utf8")
 const loginFormSrc = fs.readFileSync("components/auth/login-form.tsx", "utf8")
-const mpinReturningFormSrc = fs.readFileSync("components/auth/mpin-returning-form.tsx", "utf8")
-
-// 2.1 Verify mpin-storage hasDeviceMpin export
-assert.ok(mpinStorageSrc.includes("export function hasDeviceMpin(userId: string): boolean"), "mpin-storage exports hasDeviceMpin")
-assert.ok(mpinStorageSrc.includes("export function hasMpin(userId: string): boolean"), "mpin-storage exports hasMpin")
-
-// 2.2 Verify login-form checks device presence and routes to setup-mpin for authenticated user on fresh device
-assert.ok(loginFormSrc.includes("const isDeviceConfigured = hasMpin(user.id)"), "login-form checks local device verifier in evaluateExistingSession")
-assert.ok(loginFormSrc.includes("const isDeviceConfigured = hasMpin(authenticatedId)"), "login-form checks local device verifier in handleSubmit")
-assert.ok(loginFormSrc.includes('setViewMode("setup-mpin")'), "login-form routes to setup-mpin when device has no local verifier")
-assert.ok(loginFormSrc.includes("onSetupDeviceMpin="), "login-form passes onSetupDeviceMpin handler to MpinReturningForm")
-
-// 2.3 Verify mpin-returning-form has device setup recovery CTA
-assert.ok(mpinReturningFormSrc.includes("onSetupDeviceMpin?: () => void"), "mpin-returning-form accepts onSetupDeviceMpin callback")
-assert.ok(mpinReturningFormSrc.includes("Set up MPIN for this device"), "mpin-returning-form displays recovery button")
-
-// 2.4 Execute the full 10-test MPIN account switching & fresh device suite
-console.log("  Running scripts/test-mpin-account-switching.mjs...")
-const switchingOutput = execSync("node scripts/test-mpin-account-switching.mjs", { encoding: "utf8" })
-assert.ok(switchingOutput.includes("10 passed, 0 failed"), "All 10 MPIN switching & fresh device tests must pass")
-console.log("  ✔ Cross-device MPIN routing correctly prevents 'No PIN configured' dead end.\n")
+assert.ok(loginFormSrc.includes("getMpinStatusAction()"), "login uses account status")
+assert.ok(loginFormSrc.includes("if (status.configured)"), "configured accounts reach MPIN verification")
+assert.ok(!loginFormSrc.includes("isDeviceConfigured"), "device verifier does not determine setup")
+assert.ok(mpinStorageSrc.includes("verifyMpinAction(enteredMpin)"), "verification runs on server")
+assert.ok(mpinStorageSrc.includes("enrollMpinAction(mpin)"), "enrollment runs on server")
+console.log("  Running scripts/test-phase24-mpin.mjs...")
+const phase24Output = execSync("node --single-threaded --max-old-space-size=512 --max-semi-space-size=2 --wasm-num-compilation-tasks=1 scripts/test-phase24-mpin.mjs", { encoding: "utf8" })
+assert.ok(phase24Output.includes("Phase 24 MPIN database tests passed"))
+console.log("  ✔ Account MPIN and server gate checks passed.\n")
 
 // ─── 3. Priority 2: Menstrual Cycle Estimation & Oct 3 Date Arithmetic ─────────
 

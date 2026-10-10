@@ -21,12 +21,6 @@ export function LogoutButton({ variant = "destructive", className }: LogoutButto
 
   const handleLogout = async () => {
     setIsLoggingOut(true)
-    try {
-      const supabase = createClient()
-      await supabase.auth.signOut()
-    } catch {
-      // Ignore client error
-    }
     clearRememberedUser()
     setSessionLocked(false)
     try {
@@ -34,6 +28,12 @@ export function LogoutButton({ variant = "destructive", className }: LogoutButto
     } catch (err: unknown) {
       if (err instanceof Error && err.message.includes("NEXT_REDIRECT")) {
         return
+      }
+      try {
+        const supabase = createClient()
+        await supabase.auth.signOut()
+      } catch {
+        // Continue to the login screen if the session is already gone.
       }
       router.push("/login")
       router.refresh()

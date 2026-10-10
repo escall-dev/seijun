@@ -89,8 +89,12 @@ export async function updateSession(request: NextRequest) {
     return supabaseResponse
   }
 
-  const isMpinLocked = request.cookies.get("seijun-mpin-locked")?.value === "true"
-  const isMpinSetupPending = request.cookies.get("seijun-mpin-setup")?.value === "pending"
+  // A browser can edit cookies. Database-backed session state is authoritative.
+  let mpinVerified = false
+  if (user && (isProtectedRoute || isAuthRoute || isRoot)) {
+    const { data, error } = await supabase.rpc("mpin_access_allowed")
+    mpinVerified = !error && data === true
+  }
 
   // 1. Unauthenticated user on protected route -> /login
   if (!user && isProtectedRoute) {
@@ -118,7 +122,7 @@ export async function updateSession(request: NextRequest) {
   }
 
   // 2b. Authenticated user whose device/session is locked by MPIN -> redirect to /login
-  if (user && isMpinLocked && (isProtectedRoute || isRoot)) {
+  if (user && !mpinVerified && (isProtectedRoute || isRoot)) {
     const redirectUrl = request.nextUrl.clone()
     redirectUrl.pathname = "/login"
     if (pathname !== "/dashboard" && pathname !== "/onboarding" && pathname !== "/") {
@@ -133,8 +137,7 @@ export async function updateSession(request: NextRequest) {
 
   // 3. Authenticated user visiting /login or /register
   if (user && isAuthRoute) {
-    // If MPIN is locked or MPIN creation is pending, allow access to /login to unlock/setup
-    if (isMpinLocked || isMpinSetupPending) {
+    if (!mpinVerified) {
       return supabaseResponse
     }
 

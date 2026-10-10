@@ -5,6 +5,7 @@ import { getSiteUrl } from "@/lib/config/site"
 import { redirect } from "next/navigation"
 import { revalidatePath } from "next/cache"
 import { cookies } from "next/headers"
+import { lockMpinAction, getMpinStatusAction } from "@/app/actions/mpin"
 
 export interface AuthActionResult {
   success?: boolean
@@ -94,35 +95,22 @@ export async function loginAction(
       }
 
       const displayName = data.user.user_metadata?.display_name || null
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("onboarding_completed, has_mpin")
-        .eq("user_id", data.user.id)
-        .single()
-
-      if (!profile) {
-        await supabase.from("profiles").upsert(
-          {
-            user_id: data.user.id,
-            display_name: displayName,
-          },
-          { onConflict: "user_id" }
-        )
-      }
+      const status = await getMpinStatusAction()
+      if (!status) return { success: false, error: "Unable to check MPIN status. Please try again." }
 
       authenticatedUser = {
         id: data.user.id,
         email: data.user.email,
         displayName: displayName,
-        onboardingCompleted: profile?.onboarding_completed ?? false,
-        hasMpin: profile?.has_mpin ?? false,
+        onboardingCompleted: status.onboardingCompleted,
+        hasMpin: status.configured,
       }
 
-      if (!profile?.onboarding_completed) {
+      if (!status.onboardingCompleted) {
         targetRedirect = "/onboarding"
       } else {
         targetRedirect =
-          redirectUrl.startsWith("/") && redirectUrl !== "/login"
+          redirectUrl.startsWith("/") && !redirectUrl.startsWith("//") && redirectUrl !== "/login"
             ? redirectUrl
             : "/dashboard"
       }
@@ -287,6 +275,7 @@ export async function registerAction(
  */
 export async function logoutAction(): Promise<void> {
   try {
+    await lockMpinAction()
     const supabase = await createClient()
     await supabase.auth.signOut()
     const cookieStore = await cookies()
@@ -306,6 +295,10 @@ export async function logoutAction(): Promise<void> {
  */
 export async function setSessionLockAction(locked: boolean): Promise<void> {
   try {
+    if (locked && !(await lockMpinAction())) {
+      const supabase = await createClient()
+      await supabase.auth.signOut()
+    }
     const cookieStore = await cookies()
     if (locked) {
       cookieStore.set("seijun-mpin-locked", "true", {
@@ -348,6 +341,7 @@ export async function setMpinSetupPendingAction(pending: boolean): Promise<void>
  */
 export async function forgotMpinAction(): Promise<void> {
   try {
+    await lockMpinAction()
     const supabase = await createClient()
     await supabase.auth.signOut()
     const cookieStore = await cookies()
@@ -366,23 +360,8 @@ export async function forgotMpinAction(): Promise<void> {
  * Server Action: Get authenticated user's MPIN status from profiles table
  */
 export async function getUserMpinStatusAction(): Promise<{ hasMpin: boolean }> {
-  try {
-    const supabase = await createClient()
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-    if (!user) return { hasMpin: false }
-
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("has_mpin")
-      .eq("user_id", user.id)
-      .single()
-
-    return { hasMpin: Boolean(profile?.has_mpin) }
-  } catch {
-    return { hasMpin: false }
-  }
+  const status = await getMpinStatusAction()
+  return { hasMpin: status?.configured ?? false }
 }
 
 /**
@@ -391,26 +370,6 @@ export async function getUserMpinStatusAction(): Promise<{ hasMpin: boolean }> {
 export async function setUserMpinStatusAction(
   hasMpin: boolean
 ): Promise<{ success: boolean; error?: string }> {
-  try {
-    const supabase = await createClient()
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-    if (!user) return { success: false, error: "Not authenticated" }
-
-    const { error } = await supabase
-      .from("profiles")
-      .update({ has_mpin: hasMpin, updated_at: new Date().toISOString() })
-      .eq("user_id", user.id)
-
-    if (error) {
-      return { success: false, error: error.message }
-    }
-    return { success: true }
-  } catch (err) {
-    return {
-      success: false,
-      error: err instanceof Error ? err.message : "Failed to update MPIN status",
-    }
-  }
+  void hasMpin
+  return { success: false, error: "MPIN status is managed by account enrollment." }
 }

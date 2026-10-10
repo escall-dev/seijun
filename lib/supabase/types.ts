@@ -530,6 +530,13 @@ export interface Database {
       [_ in never]: never
     }
     Functions: {
+      mpin_access_allowed: { Args: Record<PropertyKey, never>; Returns: boolean }
+      mpin_status: { Args: Record<PropertyKey, never>; Returns: Json }
+      mpin_enroll: { Args: { p_pin: string }; Returns: boolean }
+      mpin_verify: { Args: { p_pin: string }; Returns: Json }
+      mpin_lock: { Args: Record<PropertyKey, never>; Returns: undefined }
+      mpin_change: { Args: { p_old_pin: string; p_new_pin: string }; Returns: boolean }
+      mpin_recover: { Args: { p_new_pin: string }; Returns: boolean }
       claim_note_notification: { Args: { p_event_id: string }; Returns: string | null }
       get_notes_date_page: { Args: { p_user_id: string; p_author: string; p_snapshot: string; p_before?: string; p_limit?: number }; Returns: Json }
       get_all_push_subscriptions_for_admin_test: {
