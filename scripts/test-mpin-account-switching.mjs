@@ -68,9 +68,10 @@ function hashMpin(mpin, saltHex) {
   return derived.toString("hex")
 }
 
-// Simulated Database (profiles table)
+// Simulated Database (profiles & private.mpin_credentials tables)
 const mockDatabase = {
   profiles: new Map(), // user_id -> { id, user_id, has_mpin, display_name }
+  credentials: new Map(), // user_id -> string (6-digit PIN verifier simulation)
   getProfile(userId) {
     return this.profiles.get(userId) || null
   },
@@ -82,11 +83,19 @@ const mockDatabase = {
     existing.has_mpin = hasMpin
     this.profiles.set(userId, existing)
   },
+  setCredential(userId, pin) {
+    this.credentials.set(userId, pin)
+    this.updateMpin(userId, true)
+  },
+  getCredential(userId) {
+    return this.credentials.get(userId) || null
+  },
 }
 
 // Simulated Client Storage Layer mirroring lib/auth/mpin-storage.ts
 const storageManager = {
   PREFIX: "seijun_mpin_",
+  simulateError: false,
   getKey(suffix, userId) {
     return `${this.PREFIX}${suffix}_${userId}`
   },
@@ -102,7 +111,7 @@ const storageManager = {
     if (rememberDevice) {
       this.saveAutofillMpin(userId, mpin)
     }
-    mockDatabase.updateMpin(userId, true)
+    mockDatabase.setCredential(userId, mpin)
   },
   saveAutofillMpin(userId, mpin) {
     if (!userId || !mpin) return
@@ -131,13 +140,17 @@ const storageManager = {
     mockDatabase.updateMpin(userId, false)
   },
   async fetchUserMpinConfiguration(userId) {
+    if (this.simulateError) {
+      throw new Error("Unable to check MPIN status. Database connection error.")
+    }
     if (!userId) return false
-    const local = this.hasMpin(userId)
+    const cred = mockDatabase.getCredential(userId)
     const profile = mockDatabase.getProfile(userId)
-    const dbConfigured = Boolean(profile?.has_mpin)
+    const dbConfigured = Boolean(cred || profile?.has_mpin)
+    const local = this.hasMpin(userId)
 
     if (local && !dbConfigured) {
-      mockDatabase.updateMpin(userId, true)
+      mockDatabase.setCredential(userId, "123456")
       mockStorage.setItem(this.getKey("configured", userId), "true")
       return true
     }
@@ -145,6 +158,13 @@ const storageManager = {
     const finalResult = dbConfigured || local
     mockStorage.setItem(this.getKey("configured", userId), finalResult ? "true" : "false")
     return finalResult
+  },
+  verifyMpin(userId, mpin) {
+    const expected = mockDatabase.getCredential(userId)
+    if (expected && expected === mpin) {
+      return { success: true }
+    }
+    return { success: false }
   },
 }
 
@@ -189,8 +209,14 @@ class SimulatedLoginForm {
     }
 
     // 3. Fetch MPIN configuration specifically for user.id
-    await storageManager.fetchUserMpinConfiguration(user.id)
-    const isDeviceConfigured = storageManager.hasMpin(user.id)
+    let isConfigured = false
+    try {
+      isConfigured = await storageManager.fetchUserMpinConfiguration(user.id)
+    } catch {
+      this.viewMode = "email-password"
+      return { success: false, error: "Unable to check MPIN status. Please try again." }
+    }
+    const hasDeviceCredential = storageManager.hasMpin(user.id)
 
     const userObj = {
       id: user.id,
@@ -198,7 +224,7 @@ class SimulatedLoginForm {
       displayName: user.displayName,
     }
 
-    if (isDeviceConfigured) {
+    if (isConfigured || hasDeviceCredential) {
       this.currentUser = userObj
       mockStorage.setItem("seijun_remembered_user", JSON.stringify(userObj))
       this.viewMode = "returning-mpin"
@@ -374,27 +400,45 @@ await test("Test 9: Database profiles.has_mpin serves as source of truth", async
   assert.equal(isConfigured, true, "Must recognize DB configuration even without prior local verifier")
 })
 
-await test("Test 10: Fresh device with account has_mpin in DB routes authenticated user to device MPIN setup, not broken returning-mpin", async () => {
+await test("Test 10: Fresh device with account MPIN identifies existing credential, displays returning-mpin, verifies original PIN, and fails closed on DB error", async () => {
   const freshUserId = "user-brand-new-999"
   const freshUser = { id: freshUserId, email: "fresh@seijun.com", password: "Password123!", displayName: "Fresh Device User" }
   mockUserRegistry[freshUser.email] = freshUser
 
+  // Device A: User enrolls MPIN "999999"
+  storageManager.saveMpin(freshUserId, "999999", true)
+  assert.equal(mockDatabase.getCredential(freshUserId), "999999")
+  assert.equal(mockDatabase.getProfile(freshUserId).has_mpin, true)
+
+  // Device B: Starts with completely empty local storage (no local verifiers, no remembered users)
+  mockStorage.clear()
+  assert.equal(storageManager.hasMpin(freshUserId), false, "Device B has empty local storage (no device verifier)")
+
+  // Account logs in on Device B
   const form = new SimulatedLoginForm()
   const result = await form.handleSubmit(freshUser.email, freshUser.password, mockUserRegistry)
 
   assert.equal(result.success, true)
-  assert.equal(form.viewMode, "setup-mpin", "Fresh device must prompt for device MPIN setup")
-  assert.equal(form.setupUserId, freshUserId)
-  assert.equal(form.currentUser, null)
+  assert.equal(form.viewMode, "returning-mpin", "Fresh device must identify account credential and show returning-mpin")
+  assert.equal(form.currentUser?.id, freshUserId)
+  assert.equal(form.setupUserId, null, "Must NOT show setup-mpin to user with existing MPIN")
 
-  // User sets up MPIN on this device
-  storageManager.saveMpin(freshUserId, "999999", true)
-  assert.equal(storageManager.hasMpin(freshUserId), true, "Device now has local MPIN verifier")
+  // On Device B, same PIN succeeds
+  const verifySuccess = storageManager.verifyMpin(freshUserId, "999999")
+  assert.equal(verifySuccess.success, true, "Same 6-digit MPIN succeeds on Device B")
 
-  // Returning on this now-configured device shows returning-mpin
-  const returnForm = new SimulatedLoginForm()
-  await returnForm.handleSubmit(freshUser.email, freshUser.password, mockUserRegistry)
-  assert.equal(returnForm.viewMode, "returning-mpin", "Configured device now shows returning MPIN")
+  // On Device B, wrong PIN fails
+  const verifyFail = storageManager.verifyMpin(freshUserId, "000000")
+  assert.equal(verifyFail.success, false, "Incorrect MPIN fails on Device B")
+
+  // Database / RPC failure fails closed and NEVER triggers setup-mpin
+  storageManager.simulateError = true
+  const failForm = new SimulatedLoginForm()
+  const failResult = await failForm.handleSubmit(freshUser.email, freshUser.password, mockUserRegistry)
+  assert.equal(failResult.success, false)
+  assert.equal(failForm.viewMode, "email-password", "DB failure must fail closed to email-password")
+  assert.notEqual(failForm.viewMode, "setup-mpin", "DB failure must NEVER trigger setup-mpin")
+  storageManager.simulateError = false
 })
 
 console.log("\n=================================================")

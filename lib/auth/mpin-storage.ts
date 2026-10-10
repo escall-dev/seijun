@@ -203,10 +203,37 @@ export async function verifyMpin(
 ): Promise<VerifyMpinResult> {
   if (!userId) return { success: false, error: "Authentication required." }
   const result = await verifyMpinAction(enteredMpin)
-  return result.success
-    ? { success: true }
-    : { success: false, isLockedOut: result.locked, lockedSecondsRemaining: result.locked ? 900 : undefined,
-        error: result.locked ? "Too many attempts. Try again later." : "Unable to verify MPIN." }
+  if (result.success) {
+    return { success: true }
+  }
+
+  // If server verification didn't succeed and account is not locked out,
+  // check if this device has a legacy local verifier to migrate to the server.
+  if (!result.locked && typeof window !== "undefined") {
+    const legacyRecord = getMpinRecord(userId)
+    if (legacyRecord) {
+      try {
+        const { hashMpin, timingSafeEqual } = await import("@/lib/auth/mpin-crypto")
+        const hashed = await hashMpin(enteredMpin, legacyRecord.salt)
+        if (timingSafeEqual(hashed, legacyRecord.verifier)) {
+          const enrollResult = await enrollMpinAction(enteredMpin)
+          if (enrollResult.success) {
+            retireLegacyMpin(userId)
+            return { success: true }
+          }
+        }
+      } catch {
+        // Fall back to server error result
+      }
+    }
+  }
+
+  return {
+    success: false,
+    isLockedOut: result.locked,
+    lockedSecondsRemaining: result.locked ? 900 : undefined,
+    error: result.locked ? "Too many attempts. Try again later." : "Unable to verify MPIN.",
+  }
 }
 
 /**

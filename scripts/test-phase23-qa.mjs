@@ -39,10 +39,10 @@ const createCycle = (start_date, end_date = null, period_duration = null) => {
 console.log("Section 1: Canonical Application Version Invariance")
 const pkg = JSON.parse(fs.readFileSync("package.json", "utf8"))
 const versionTs = fs.readFileSync("lib/version.ts", "utf8")
-assert.equal(pkg.version, "1.22.0", "package.json version must remain 1.22.0")
+assert.equal(pkg.version, "1.22.1", "package.json version must remain 1.22.1")
 assert.ok(versionTs.includes("packageJson.version"), "lib/version.ts APP_VERSION sources canonical packageJson.version")
 assert.ok(versionTs.includes("`v${packageJson.version}`"), "lib/version.ts APP_VERSION_LABEL sources canonical packageJson.version")
-console.log("  ✔ Application version exactly 1.22.0 (v1.22.0) preserved.\n")
+console.log("  ✔ Application version exactly 1.22.1 (v1.22.1) preserved.\n")
 
 // ─── 2. Priority 1: Multi-Device MPIN Logic ───────────────────────────────────
 

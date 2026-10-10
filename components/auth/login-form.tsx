@@ -11,6 +11,7 @@ import {
   setRememberedUser,
   clearRememberedUser,
   retireLegacyMpin,
+  hasDeviceMpin,
 } from "@/lib/auth/mpin-storage"
 import { MpinReturningForm, type MpinReturningUser } from "@/components/auth/mpin-returning-form"
 import { MpinSetupForm } from "@/components/auth/mpin-setup-form"
@@ -145,13 +146,20 @@ export function LoginForm({ version }: LoginFormProps = {}) {
             setRememberedUser(userObj)
             await setMpinSetupPendingAction(false)
             setViewMode("returning-mpin")
+          } else if (hasDeviceMpin(user.id)) {
+            postMpinTargetRef.current = status.onboardingCompleted ? redirectTarget : "/onboarding"
+            setCurrentUser(userObj)
+            setRememberedUser(userObj)
+            await setMpinSetupPendingAction(false)
+            setViewMode("returning-mpin")
           } else {
             postMpinTargetRef.current = status.onboardingCompleted ? redirectTarget : "/onboarding"
-            // No trusted account verifier exists, including legacy local-only users.
+            // No trusted account verifier exists, including legacy local-only users on a fresh device.
             setCurrentUser(null)
             setSetupUserId(user.id)
             setSetupUserEmail(user.email)
             setSetupDisplayName(user.user_metadata?.display_name || null)
+            setRecoveryMode(status.legacy)
             setSessionLocked(false)
             await setSessionLockAction(false)
             await setMpinSetupPendingAction(true)
@@ -298,9 +306,14 @@ export function LoginForm({ version }: LoginFormProps = {}) {
         setRememberedUser(userObj)
         await setMpinSetupPendingAction(false)
         setViewMode("returning-mpin")
+      } else if (hasDeviceMpin(authenticatedId) && !urlResetMpin) {
+        setCurrentUser(userObj)
+        setRememberedUser(userObj)
+        await setMpinSetupPendingAction(false)
+        setViewMode("returning-mpin")
       } else {
-        // Initial enrollment or legacy re-enrollment after credential login.
-        setRecoveryMode(status.configured && urlResetMpin)
+        // Initial enrollment or recovery for reset/legacy credential.
+        setRecoveryMode((status.configured && urlResetMpin) || (status.legacy && !hasDeviceMpin(authenticatedId)))
         setSessionLocked(false)
         await setSessionLockAction(false)
         await setMpinSetupPendingAction(true)

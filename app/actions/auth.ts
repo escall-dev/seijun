@@ -359,9 +359,12 @@ export async function forgotMpinAction(): Promise<void> {
 /**
  * Server Action: Get authenticated user's MPIN status from profiles table
  */
-export async function getUserMpinStatusAction(): Promise<{ hasMpin: boolean }> {
+export async function getUserMpinStatusAction(): Promise<{ hasMpin: boolean; error?: string }> {
   const status = await getMpinStatusAction()
-  return { hasMpin: status?.configured ?? false }
+  if (!status) {
+    return { hasMpin: false, error: "Unable to check MPIN status. Please try again." }
+  }
+  return { hasMpin: status.configured }
 }
 
 /**

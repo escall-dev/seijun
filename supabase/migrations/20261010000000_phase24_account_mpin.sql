@@ -183,9 +183,16 @@ BEGIN
   IF auth.uid() IS NULL OR sid IS NULL OR p_new_pin !~ '^[0-9]{6}$' THEN RETURN false; END IF;
   IF NOT EXISTS (SELECT 1 FROM auth.sessions s WHERE s.id = sid AND s.user_id = auth.uid()
     AND s.created_at > now() - interval '2 minutes') THEN RETURN false; END IF;
-  UPDATE private.mpin_credentials SET verifier = private.mpin_crypt(p_new_pin, private.mpin_salt()),
-    failed_attempts = 0, locked_until = NULL, changed_at = now() WHERE user_id = auth.uid();
-  IF NOT FOUND THEN RETURN false; END IF;
+  INSERT INTO private.mpin_credentials(user_id, verifier, failed_attempts, locked_until, changed_at)
+  VALUES (auth.uid(), private.mpin_crypt(p_new_pin, private.mpin_salt()), 0, NULL, now())
+  ON CONFLICT (user_id) DO UPDATE SET
+    verifier = EXCLUDED.verifier,
+    failed_attempts = 0,
+    locked_until = NULL,
+    changed_at = now();
+  INSERT INTO public.profiles(user_id) VALUES (auth.uid()) ON CONFLICT (user_id) DO NOTHING;
+  PERFORM pg_catalog.set_config('app.mpin_internal', 'yes', true);
+  UPDATE public.profiles SET has_mpin = true WHERE user_id = auth.uid();
   DELETE FROM private.mpin_verified_sessions WHERE user_id = auth.uid();
   RETURN true;
 END;
@@ -204,6 +211,8 @@ BEGIN
   LOOP
     FOREACH op IN ARRAY ARRAY['SELECT','INSERT','UPDATE','DELETE'] LOOP
       IF NOT (t.relname = 'profiles' AND op = 'INSERT') THEN
+        EXECUTE format('DROP POLICY IF EXISTS %I ON public.%I',
+          'MPIN verified ' || lower(op), t.relname);
         EXECUTE format('CREATE POLICY %I ON public.%I AS RESTRICTIVE FOR %s TO authenticated %s',
           'MPIN verified ' || lower(op), t.relname, op,
           CASE WHEN op = 'INSERT' THEN 'WITH CHECK (public.mpin_access_allowed())'
@@ -260,7 +269,8 @@ DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_roles r, unnest(COALESCE(r.rolconfig, ARRAY[]::text[])) c
     WHERE r.rolname = 'authenticator' AND c LIKE 'pgrst.db_pre_request=%'
-      AND c <> 'pgrst.db_pre_request=') THEN
+      AND c <> 'pgrst.db_pre_request='
+      AND c <> 'pgrst.db_pre_request=public.mpin_pre_request') THEN
     RAISE EXCEPTION 'Existing PostgREST pre-request hook needs manual integration before Phase 24';
   END IF;
 END;
