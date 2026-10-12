@@ -7,11 +7,14 @@ import { loginAction, setSessionLockAction, setMpinSetupPendingAction, type Auth
 import { getMpinStatusAction, lockMpinAction } from "@/app/actions/mpin"
 import { createClient } from "@/lib/supabase/client"
 import {
+  isSessionLocked,
   setSessionLocked,
   setRememberedUser,
   clearRememberedUser,
   retireLegacyMpin,
   hasDeviceMpin,
+  setRememberDeviceEnabled,
+  setMpinRememberMeEnabled,
 } from "@/lib/auth/mpin-storage"
 import { MpinReturningForm, type MpinReturningUser } from "@/components/auth/mpin-returning-form"
 import { MpinSetupForm } from "@/components/auth/mpin-setup-form"
@@ -134,6 +137,28 @@ export function LoginForm({ version }: LoginFormProps = {}) {
             displayName: user.user_metadata?.display_name || null,
           }
 
+          const clientSessionLocked = isSessionLocked()
+          if (status.verified && clientSessionLocked) {
+            // A lock was signaled by the client/cookie, but the database session is still marked verified.
+            // Attempt an immediate server-side lock reconciliation.
+            const lockSuccess = await lockMpinAction().catch(() => false)
+            if (lockSuccess) {
+              status.verified = false
+            } else {
+              // Both the previous logout lock and this retry failed.
+              // Fail closed: perform full sign-out to prevent an unrevoked session from accessing protected data.
+              await supabase.auth.signOut().catch(() => {})
+              clearRememberedUser()
+              setSessionLocked(false)
+              await setSessionLockAction(false).catch(() => {})
+              if (isMounted) {
+                setCurrentUser(null)
+                setViewMode("email-password")
+              }
+              return
+            }
+          }
+
           if (status.verified) {
             router.push(status.onboardingCompleted ? redirectTarget : "/onboarding")
             router.refresh()
@@ -216,7 +241,8 @@ export function LoginForm({ version }: LoginFormProps = {}) {
       // Ignore
     }
     document.cookie = "seijun_cycle_context=; path=/; max-age=0; SameSite=Lax"
-    router.refresh()
+    document.cookie = "sb-remember-me=; path=/; max-age=0; SameSite=Lax"
+    document.cookie = "seijun-mpin-locked=; path=/; max-age=0; SameSite=Lax"
     clearRememberedUser()
     setSessionLocked(false)
     await setSessionLockAction(false)
@@ -227,6 +253,7 @@ export function LoginForm({ version }: LoginFormProps = {}) {
     setSetupUserEmail(undefined)
     setSetupDisplayName(null)
     setViewMode("email-password")
+    router.refresh()
   }, [router])
 
   // 4. Handle Forgot MPIN
@@ -280,6 +307,10 @@ export function LoginForm({ version }: LoginFormProps = {}) {
 
       const authenticatedId = result.user.id
 
+      // Synchronize device and MPIN remember preferences
+      setRememberDeviceEnabled(authenticatedId, isRemembered)
+      setMpinRememberMeEnabled(authenticatedId, isRemembered)
+
       // 1. Wipe all account-specific state from any prior account
       setCurrentUser(null)
       setSetupUserId(null)
@@ -303,12 +334,20 @@ export function LoginForm({ version }: LoginFormProps = {}) {
       if (status.configured && !urlResetMpin) {
         retireLegacyMpin(authenticatedId)
         setCurrentUser(userObj)
-        setRememberedUser(userObj)
+        if (isRemembered) {
+          setRememberedUser(userObj)
+        } else {
+          clearRememberedUser()
+        }
         await setMpinSetupPendingAction(false)
         setViewMode("returning-mpin")
       } else if (hasDeviceMpin(authenticatedId) && !urlResetMpin) {
         setCurrentUser(userObj)
-        setRememberedUser(userObj)
+        if (isRemembered) {
+          setRememberedUser(userObj)
+        } else {
+          clearRememberedUser()
+        }
         await setMpinSetupPendingAction(false)
         setViewMode("returning-mpin")
       } else {

@@ -45,7 +45,12 @@ function getKey(suffix: string, userId?: string): string {
 export function isSessionLocked(): boolean {
   if (typeof window === "undefined") return false
   const match = document.cookie.match(/(?:^|;\s*)seijun-mpin-locked=([^;]*)/)
-  return match ? match[1] === "true" : false
+  if (match && match[1] === "true") return true
+  try {
+    return sessionStorage.getItem("seijun_session_locked") === "true"
+  } catch {
+    return false
+  }
 }
 
 /**
@@ -119,8 +124,11 @@ export async function saveMpin(
   if (!result.success) throw new Error("MPIN setup failed. Sign in again to retry, or enter the PIN already set on another device.")
   clearLegacySecrets(userId)
   localStorage.setItem(getKey("remember", userId), rememberDevice ? "true" : "false")
+  setMpinRememberMeEnabled(userId, rememberDevice)
   if (rememberDevice) {
-    // Device preference never stores the PIN itself.
+    saveAutofillMpin(userId, mpin)
+  } else {
+    clearAutofillMpin(userId)
   }
   if (userProfile) {
     setRememberedUser({
@@ -375,20 +383,52 @@ export function setMpinRememberMeEnabled(userId: string, enabled: boolean): void
 }
 
 export function saveAutofillMpin(userId: string, mpin: string): void {
-  void mpin
-  clearAutofillMpin(userId)
+  if (typeof window === "undefined" || !userId || !mpin || mpin.length !== 6) return
+  try {
+    const encoded =
+      typeof btoa !== "undefined"
+        ? btoa(`seijun_${userId}_${mpin}`)
+        : Buffer.from(`seijun_${userId}_${mpin}`).toString("base64")
+    localStorage.setItem(getKey("autofill", userId), encoded)
+    localStorage.setItem(getKey("remember_mpin", userId), "true")
+  } catch {
+    // Ignore storage errors
+  }
 }
 
 export function getAutofillMpin(userId?: string): string | null {
-  if (userId && typeof window !== "undefined") clearAutofillMpin(userId)
-  return null
+  if (typeof window === "undefined" || !userId) return null
+  try {
+    const isRemembered = localStorage.getItem(getKey("remember_mpin", userId))
+    if (isRemembered === "false") return null
+
+    const raw = localStorage.getItem(getKey("autofill", userId))
+    if (!raw) return null
+
+    const decoded =
+      typeof atob !== "undefined"
+        ? atob(raw)
+        : Buffer.from(raw, "base64").toString("utf-8")
+    const prefix = `seijun_${userId}_`
+    if (decoded.startsWith(prefix)) {
+      const pin = decoded.slice(prefix.length)
+      if (/^\d{6}$/.test(pin)) {
+        return pin
+      }
+    }
+    if (/^\d{6}$/.test(decoded)) {
+      return decoded
+    }
+    return null
+  } catch {
+    return null
+  }
 }
 
 export function clearAutofillMpin(userId: string): void {
   if (typeof window === "undefined" || !userId) return
   try {
     localStorage.removeItem(getKey("autofill", userId))
-    localStorage.setItem(getKey("remember_mpin", userId), "false")
   } catch {
     // Ignore storage errors
   }
@@ -417,7 +457,7 @@ export function clearMpin(userId: string): void {
 
 function clearLegacySecrets(userId: string): void {
   if (typeof window === "undefined") return
-  for (const suffix of ["verifier", "autofill", "autounlock", "attempts"]) {
+  for (const suffix of ["verifier", "autounlock", "attempts"]) {
     localStorage.removeItem(getKey(suffix, userId))
   }
 }

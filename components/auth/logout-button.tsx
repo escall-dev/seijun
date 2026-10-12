@@ -8,7 +8,13 @@ import { LogOut, Loader2, ChevronRight } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useRouter } from "next/navigation"
 
-import { setSessionLocked, clearRememberedUser } from "@/lib/auth/mpin-storage"
+import {
+  setSessionLocked,
+  clearRememberedUser,
+  getRememberedUser,
+  isMpinRememberMeEnabled,
+  isRememberDeviceEnabled,
+} from "@/lib/auth/mpin-storage"
 
 interface LogoutButtonProps {
   variant?: "destructive" | "listItem"
@@ -21,22 +27,56 @@ export function LogoutButton({ variant = "destructive", className }: LogoutButto
 
   const handleLogout = async () => {
     setIsLoggingOut(true)
-    clearRememberedUser()
-    setSessionLocked(false)
-    try {
-      await logoutAction()
-    } catch (err: unknown) {
-      if (err instanceof Error && err.message.includes("NEXT_REDIRECT")) {
-        return
+    const rememberedUser = getRememberedUser()
+    const isRemembered = Boolean(
+      rememberedUser?.id &&
+      isMpinRememberMeEnabled(rememberedUser.id) &&
+      isRememberDeviceEnabled(rememberedUser.id)
+    )
+
+    if (isRemembered) {
+      if (typeof document !== "undefined") {
+        document.cookie = "sb-remember-me=true; path=/; max-age=2592000; SameSite=Lax"
       }
+      setSessionLocked(true)
       try {
-        const supabase = createClient()
-        await supabase.auth.signOut()
-      } catch {
-        // Continue to the login screen if the session is already gone.
+        await logoutAction()
+      } catch (err: unknown) {
+        if (err instanceof Error && err.message.includes("NEXT_REDIRECT")) {
+          return
+        }
+        try {
+          const supabase = createClient()
+          await supabase.auth.signOut()
+        } catch {
+          // Continue to login screen if sign out fails
+        }
+        clearRememberedUser()
+        setSessionLocked(false)
+        router.push("/login")
+        router.refresh()
       }
-      router.push("/login")
-      router.refresh()
+    } else {
+      if (typeof document !== "undefined") {
+        document.cookie = "sb-remember-me=; path=/; max-age=0; SameSite=Lax"
+      }
+      clearRememberedUser()
+      setSessionLocked(false)
+      try {
+        await logoutAction({ forceFullSignOut: true })
+      } catch (err: unknown) {
+        if (err instanceof Error && err.message.includes("NEXT_REDIRECT")) {
+          return
+        }
+        try {
+          const supabase = createClient()
+          await supabase.auth.signOut()
+        } catch {
+          // Continue to the login screen if the session is already gone.
+        }
+        router.push("/login")
+        router.refresh()
+      }
     }
   }
 

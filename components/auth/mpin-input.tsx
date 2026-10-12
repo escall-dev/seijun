@@ -15,6 +15,9 @@ export interface MpinInputProps {
   autoFocus?: boolean
   className?: string
   maskDigits?: boolean
+  autoComplete?: string
+  name?: string
+  id?: string
 }
 
 /**
@@ -36,6 +39,9 @@ export function MpinInput({
   autoFocus = true,
   className,
   maskDigits = true,
+  autoComplete = "current-password",
+  name = "mpin",
+  id = "mpin-input",
 }: MpinInputProps) {
   const inputRef = React.useRef<HTMLInputElement | null>(null)
   const [isFocused, setIsFocused] = React.useState(false)
@@ -132,11 +138,13 @@ export function MpinInput({
         {/* Single native high-performance input */}
         <input
           ref={inputRef}
+          id={id}
+          name={name}
           type={maskDigits ? "password" : "text"}
           inputMode="numeric"
           pattern="[0-9]*"
           maxLength={6}
-          autoComplete="one-time-code"
+          autoComplete={autoComplete}
           autoCorrect="off"
           autoCapitalize="none"
           spellCheck={false}

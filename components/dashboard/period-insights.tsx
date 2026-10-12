@@ -61,7 +61,7 @@ export function PeriodInsights({
                 variant="lavender"
                 className="text-[10px] sm:text-[11px] font-normal px-1.5 sm:px-2 py-0 h-4 sm:h-5"
               >
-                {latestPeriod.isOngoing ? "Ongoing" : "Completed"}
+                {latestPeriod.status || (latestPeriod.isOngoing ? "In Progress" : "Done")}
               </Badge>
             )}
           </div>
@@ -71,7 +71,7 @@ export function PeriodInsights({
               <div className="text-sm sm:text-base md:text-lg font-semibold text-foreground leading-snug break-words">
                 {latestPeriod.endDate
                   ? `${formatDate(latestPeriod.startDate, false)} – ${formatDate(latestPeriod.endDate)}`
-                  : `${formatDate(latestPeriod.startDate)} (Ongoing)`}
+                  : `${formatDate(latestPeriod.startDate)} (In Progress)`}
               </div>
 
               <div className="flex items-center gap-1.5 text-[11px] sm:text-xs text-muted-foreground">

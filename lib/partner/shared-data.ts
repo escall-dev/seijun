@@ -5,7 +5,7 @@ import {
   type AuthorizationDenialReason,
 } from "./authorization"
 import type { CycleRecord, PeriodDayRecord } from "@/app/actions/cycles"
-import { calculateDaysBetween } from "@/lib/calculations/cycle-calculations"
+import { calculateDaysBetween, calculatePeriodRecordStatus, type PeriodRecordStatus } from "@/lib/calculations/cycle-calculations"
 
 /**
  * Seijun Phase 19 Batch 3 — Steps 12–14
@@ -203,6 +203,7 @@ export interface SharedPeriodStatus {
   lastPeriodStartDate: string | null
   lastPeriodEndDate: string | null
   lastPeriodDuration: number | null
+  status?: PeriodRecordStatus | null
 }
 
 /**
@@ -298,6 +299,7 @@ export async function getSharedPeriodStatus(
         lastPeriodStartDate,
         lastPeriodEndDate,
         lastPeriodDuration,
+        status: lastPeriodStartDate ? calculatePeriodRecordStatus(lastPeriodStartDate, lastPeriodEndDate) : null,
       },
     }
   } catch {

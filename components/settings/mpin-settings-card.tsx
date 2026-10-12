@@ -239,7 +239,7 @@ export function MpinSettingsCard() {
                   htmlFor="rememberDeviceToggle"
                   className="font-medium text-foreground text-sm block cursor-pointer select-none"
                 >
-                  Remember This Device
+                  Remember Me
                 </label>
                 <p className="text-xs text-muted-foreground leading-relaxed">
                   Keep your encrypted session active across browser restarts without re-entering email and password.
@@ -307,6 +307,9 @@ export function MpinSettingsCard() {
           <div className="py-2">
             {changeStep === "current" && (
               <MpinInput
+                id="settings-current-mpin"
+                name="currentMpin"
+                autoComplete="current-password"
                 value={currentMpin}
                 onChange={(val) => {
                   setCurrentMpin(val)
@@ -320,6 +323,9 @@ export function MpinSettingsCard() {
 
             {changeStep === "new" && (
               <MpinInput
+                id="settings-new-mpin"
+                name="newMpin"
+                autoComplete="new-password"
                 value={newMpin}
                 onChange={(val) => {
                   setNewMpin(val)
@@ -333,6 +339,9 @@ export function MpinSettingsCard() {
 
             {changeStep === "confirm" && (
               <MpinInput
+                id="settings-confirm-mpin"
+                name="confirmMpin"
+                autoComplete="new-password"
                 value={confirmMpin}
                 onChange={(val) => {
                   setConfirmMpin(val)

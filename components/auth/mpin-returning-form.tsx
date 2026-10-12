@@ -9,9 +9,12 @@ import {
   getAttemptState,
   isMpinRememberMeEnabled,
   setMpinRememberMeEnabled,
+  isRememberDeviceEnabled,
+  setRememberDeviceEnabled,
   getAutofillMpin,
   saveAutofillMpin,
   clearAutofillMpin,
+  setRememberedUser,
 } from "@/lib/auth/mpin-storage"
 import { Button } from "@/components/ui/button"
 import { AlertCircle, Loader2, LogIn } from "lucide-react"
@@ -54,8 +57,8 @@ export function MpinReturningForm({
 
   const initialRememberMe = React.useMemo(() => {
     if (typeof window === "undefined") return false
-    return Boolean(initialAutofillPin) || isMpinRememberMeEnabled(user.id)
-  }, [initialAutofillPin, user.id])
+    return isMpinRememberMeEnabled(user.id) && isRememberDeviceEnabled(user.id)
+  }, [user.id])
 
   const [initialLockout] = React.useState(() => getInitialLockout(user.id))
 
@@ -74,10 +77,14 @@ export function MpinReturningForm({
 
   React.useEffect(() => {
     isMountedRef.current = true
+    if (initialAutofillPin && !mpin) {
+      setMpin(initialAutofillPin)
+      setIsAutofilled(true)
+    }
     return () => {
       isMountedRef.current = false
     }
-  }, [])
+  }, [initialAutofillPin, mpin])
 
   // Countdown timer for lockout
   React.useEffect(() => {
@@ -114,13 +121,22 @@ export function MpinReturningForm({
       try {
         const result = await verifyMpin(user.id, codeToVerify)
         if (result.success) {
-          const shouldSave = rememberMeRef.current || rememberMe || isMpinRememberMeEnabled(user.id)
+          const shouldSave = rememberMeRef.current || rememberMe
           if (shouldSave) {
             saveAutofillMpin(user.id, codeToVerify)
             setMpinRememberMeEnabled(user.id, true)
+            setRememberDeviceEnabled(user.id, true)
+            setRememberedUser(user)
+            if (typeof document !== "undefined") {
+              document.cookie = "sb-remember-me=true; path=/; max-age=2592000; SameSite=Lax"
+            }
           } else {
             clearAutofillMpin(user.id)
             setMpinRememberMeEnabled(user.id, false)
+            setRememberDeviceEnabled(user.id, false)
+            if (typeof document !== "undefined") {
+              document.cookie = "sb-remember-me=false; path=/; SameSite=Lax"
+            }
           }
 
           // Await post-login navigation while keeping loading state active.
@@ -154,7 +170,7 @@ export function MpinReturningForm({
         }
       }
     },
-    [isVerifying, isLockedOut, user.id, rememberMe, onSuccess]
+    [isVerifying, isLockedOut, user, rememberMe, onSuccess]
   )
 
   const handleComplete = (code: string) => {
@@ -167,9 +183,19 @@ export function MpinReturningForm({
     setRememberMe(checked)
     if (user?.id) {
       setMpinRememberMeEnabled(user.id, checked)
-      if (!checked) {
+      setRememberDeviceEnabled(user.id, checked)
+      if (checked) {
+        setRememberedUser(user)
+        if (typeof document !== "undefined") {
+          document.cookie = "sb-remember-me=true; path=/; max-age=2592000; SameSite=Lax"
+        }
+      } else {
         clearAutofillMpin(user.id)
-      } else if (mpin.length === 6) {
+        if (typeof document !== "undefined") {
+          document.cookie = "sb-remember-me=false; path=/; SameSite=Lax"
+        }
+      }
+      if (checked && mpin.length === 6) {
         saveAutofillMpin(user.id, mpin)
       }
     }
@@ -231,9 +257,42 @@ export function MpinReturningForm({
           </div>
         )}
 
-        {/* MPIN Input with Clear Button */}
-        <div className="space-y-3.5 pt-1">
+        {/* Semantic Form wrapping MPIN and username for native browser credential autofill */}
+        <form
+          onSubmit={(e) => {
+            e.preventDefault()
+            handleVerify(mpin)
+          }}
+          method="post"
+          autoComplete="on"
+          className="space-y-3.5 pt-1"
+        >
+          {/* Associated username input for password manager credential linkage */}
+          <input
+            type="text"
+            name="username"
+            autoComplete="username"
+            value={user.email || ""}
+            readOnly
+            tabIndex={-1}
+            aria-hidden="true"
+            className="sr-only pointer-events-none"
+            style={{
+              position: "absolute",
+              width: "1px",
+              height: "1px",
+              padding: 0,
+              margin: "-1px",
+              overflow: "hidden",
+              clip: "rect(0, 0, 0, 0)",
+              border: 0,
+            }}
+          />
+
           <MpinInput
+            id="mpin-input"
+            name="mpin"
+            autoComplete="current-password"
             value={mpin}
             onChange={(val) => {
               setMpin(val)
@@ -259,13 +318,14 @@ export function MpinReturningForm({
             >
               <input
                 id="rememberMpin"
+                name="rememberAccount"
                 type="checkbox"
                 checked={rememberMe}
                 onChange={(e) => handleRememberMeChange(e.target.checked)}
                 disabled={isVerifying}
                 className="size-4 rounded border-border text-primary focus:ring-primary/20 accent-primary cursor-pointer transition-all"
               />
-              <span className="text-xs sm:text-sm font-medium">Remember account</span>
+              <span className="text-xs sm:text-sm font-medium">Remember me</span>
             </label>
 
             <button
@@ -282,8 +342,7 @@ export function MpinReturningForm({
           {mpin.length === 6 && (
             <div className="pt-1 animate-in fade-in slide-in-from-top-1 duration-200">
               <Button
-                type="button"
-                onClick={() => handleVerify(mpin)}
+                type="submit"
                 disabled={isVerifying || isLockedOut}
                 aria-busy={isVerifying}
                 aria-disabled={isVerifying || isLockedOut}
@@ -303,7 +362,7 @@ export function MpinReturningForm({
               </Button>
             </div>
           )}
-        </div>
+        </form>
 
         {/* User Email Pill & Switch Account */}
         <div className="flex flex-col items-center justify-center pt-2 space-y-2.5">

@@ -151,11 +151,11 @@ function PeriodLogForm({ cycleToEdit, onClose, onSuccess }: PeriodLogFormProps) 
           value={endDate}
           onChange={setEndDate}
           maxDate={todayStr}
-          placeholder="End date (leave blank if ongoing)"
+          placeholder="End date (leave blank if in progress)"
           disabled={isPending}
         />
         <p className="text-xs text-muted-foreground">
-          {endDate ? "Last day of bleeding for this cycle." : "Leave blank if your period is still ongoing."}
+          {endDate ? "Last day of bleeding for this cycle." : "Leave blank if your period is still in progress."}
         </p>
       </div>
 
@@ -226,7 +226,7 @@ export function PeriodLogDialog({
           </DialogTitle>
           <DialogDescription>
             {isEditing
-              ? "Update the actual period start and end dates. Leave the end date empty while ongoing."
+              ? "Update the actual period start and end dates. Leave the end date empty while in progress."
               : "Record your period start and end dates to track your cycle pattern."}
           </DialogDescription>
         </DialogHeader>

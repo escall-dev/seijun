@@ -49,11 +49,15 @@ export async function changeMpinAction(oldPin: string, newPin: string): Promise<
 }
 
 export async function lockMpinAction(): Promise<boolean> {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return false
-  const { error } = await supabase.rpc("mpin_lock")
-  return !error
+  try {
+    const supabase = await createClient()
+    const { data: { user }, error: userError } = await supabase.auth.getUser()
+    if (userError || !user) return false
+    const { error } = await supabase.rpc("mpin_lock")
+    return !error
+  } catch {
+    return false
+  }
 }
 
 export async function recoverMpinAction(password: string, newPin: string): Promise<{ success: boolean }> {

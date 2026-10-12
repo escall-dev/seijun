@@ -273,17 +273,56 @@ export async function registerAction(
 /**
  * Server Action: Log out user and clear session cookies
  */
-export async function logoutAction(): Promise<void> {
+export async function logoutAction(options?: { forceFullSignOut?: boolean }): Promise<void> {
   try {
-    await lockMpinAction()
-    const supabase = await createClient()
-    await supabase.auth.signOut()
     const cookieStore = await cookies()
-    cookieStore.delete("sb-remember-me")
-    cookieStore.delete("seijun_cycle_context")
-    revalidatePath("/", "layout")
-    cookieStore.delete("seijun-mpin-locked")
-    cookieStore.delete("seijun-mpin-setup")
+    const isRemembered = !options?.forceFullSignOut && cookieStore.get("sb-remember-me")?.value === "true"
+
+    let lockSucceeded = false
+    try {
+      lockSucceeded = await lockMpinAction()
+    } catch {
+      lockSucceeded = false
+    }
+
+    if (isRemembered && lockSucceeded) {
+      // Remembered user logout with confirmed server-side MPIN revocation:
+      // Revoke MPIN verification in private.mpin_verified_sessions,
+      // lock the session, but preserve Supabase auth token
+      cookieStore.set("seijun-mpin-locked", "true", {
+        path: "/",
+        sameSite: "lax",
+        httpOnly: false,
+        maxAge: 30 * 24 * 60 * 60, // 30 days
+      })
+      cookieStore.delete("seijun_cycle_context")
+      cookieStore.delete("seijun-mpin-setup")
+      revalidatePath("/", "layout")
+    } else {
+      // Full logout OR failed MPIN revocation (fail-closed):
+      try {
+        const supabase = await createClient()
+        await supabase.auth.signOut()
+      } catch {
+        // Continue to purge cookies even if GoTrue sign-out call fails
+      }
+
+      cookieStore.delete("sb-remember-me")
+      cookieStore.delete("seijun_cycle_context")
+      cookieStore.delete("seijun-mpin-locked")
+      cookieStore.delete("seijun-mpin-setup")
+      cookieStore.delete("seijun-device-id")
+
+      // Aggressively delete all Supabase auth cookies (sb-*)
+      const allCookies = cookieStore.getAll()
+      for (const cookie of allCookies) {
+        if (cookie.name.startsWith("sb-") || cookie.name.startsWith("seijun")) {
+          cookieStore.delete(cookie.name)
+        }
+      }
+
+      revalidatePath("/", "layout")
+    }
   } catch {
     // Ignore error and proceed with redirect
   }

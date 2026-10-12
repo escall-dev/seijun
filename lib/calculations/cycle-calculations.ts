@@ -147,11 +147,44 @@ export function getCurrentCycleStatus(
   }
 }
 
+export type PeriodRecordStatus = "In Progress" | "Done"
+
+/**
+ * Calculates period record status following the canonical integrity rules:
+ * - Valid start date without an end date: "In Progress"
+ * - Valid start and valid end dates (end >= start): "Done"
+ * - Missing or invalid start date: never mark "Done" (returns null)
+ * - End date earlier than start date: reject as invalid and never mark "Done" (returns null)
+ */
+export function calculatePeriodRecordStatus(
+  startDate?: string | null,
+  endDate?: string | null
+): PeriodRecordStatus | null {
+  if (!startDate || !isValidDateString(startDate)) {
+    return null
+  }
+
+  if (!endDate) {
+    return "In Progress"
+  }
+
+  if (!isValidDateString(endDate)) {
+    return null
+  }
+
+  if (endDate < startDate) {
+    return null
+  }
+
+  return "Done"
+}
+
 export interface LatestPeriodInfo {
   startDate: string
   endDate: string | null
   duration: number | null
   isOngoing: boolean
+  status: PeriodRecordStatus | null
   cycleId: string
   periodDaysCount: number
 }
@@ -185,11 +218,14 @@ export function getLatestPeriod(cycles: CycleRecord[]): LatestPeriodInfo | null 
           : sortedDays.length
       }
 
+      const status = calculatePeriodRecordStatus(firstDay, cycle.end_date)
+
       return {
         startDate: firstDay,
         endDate: cycle.end_date || (cycle.end_date === null ? null : lastDay),
         duration,
         isOngoing: !cycle.end_date,
+        status,
         cycleId: cycle.id,
         periodDaysCount: sortedDays.length,
       }

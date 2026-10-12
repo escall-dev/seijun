@@ -112,6 +112,9 @@ export function MpinSetupForm({
           {step === "create" && (
             <div className="space-y-5">
               <MpinInput
+                id="create-mpin-input"
+                name="newMpin"
+                autoComplete="new-password"
                 value={mpin}
                 onChange={(val) => {
                   setMpin(val)
@@ -136,7 +139,7 @@ export function MpinSetupForm({
                     onChange={(e) => setRememberDevice(e.target.checked)}
                     className="size-4 rounded border-border text-primary focus:ring-primary/20 accent-primary cursor-pointer"
                   />
-                  <span>Remember this device</span>
+                  <span>Remember me</span>
                 </label>
               </div>
 
@@ -163,6 +166,9 @@ export function MpinSetupForm({
                 </label>
               )}
               <MpinInput
+                id="confirm-mpin-input"
+                name="confirmMpin"
+                autoComplete="new-password"
                 value={confirmMpin}
                 onChange={(val) => {
                   setConfirmMpin(val)

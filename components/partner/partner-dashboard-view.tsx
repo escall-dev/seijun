@@ -732,7 +732,7 @@ function PeriodStatusCard({
             {d.cycleId && (
               <div className="flex items-center justify-between">
                 <span className="text-xs text-muted-foreground">Status</span>
-                <span className="text-xs font-medium text-foreground">{d.lastPeriodEndDate ? "Completed" : "Ongoing"}</span>
+                <span className="text-xs font-medium text-foreground">{d.status || (d.lastPeriodEndDate ? "Completed" : "In Progress")}</span>
               </div>
             )}
             {d.lastPeriodDuration !== null && (
