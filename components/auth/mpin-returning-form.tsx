@@ -219,7 +219,7 @@ export function MpinReturningForm({
     .join(" ")
 
   return (
-    <div className="w-full max-w-md mx-auto min-h-full flex-1 flex flex-col justify-between px-4 sm:px-6 py-4 sm:py-6 pt-[max(1.25rem,env(safe-area-inset-top))] pb-[max(1.25rem,env(safe-area-inset-bottom))]">
+    <div className="w-full max-w-md mx-auto min-h-full flex-1 flex flex-col justify-between px-4 sm:px-6 py-4 sm:py-6 pt-[max(1.25rem,env(safe-area-inset-top))] pb-[env(safe-area-inset-bottom)]">
       {/* ── Form content: centered in upper/middle portion of viewport ── */}
       <div className="w-full flex-1 flex flex-col justify-center my-auto py-2 space-y-5 sm:space-y-6">
         {/* Header & Logo Section */}
