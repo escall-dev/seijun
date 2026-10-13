@@ -34,15 +34,27 @@ const createCycle = (start_date, end_date = null, period_duration = null) => {
   }
 }
 
+// History fixtures mark periods before the newest start as completed. Leaving
+// those records open would make them contradictory to a later logged period.
+const completeHistoricalPeriods = (cycles) => {
+  const latestStart = cycles.reduce((latest, cycle) => cycle.start_date > latest ? cycle.start_date : latest, "")
+  return cycles.map((cycle) => {
+    if (cycle.start_date >= latestStart || cycle.end_date) return cycle
+    const endDate = calc.parseDateString(cycle.start_date)
+    endDate.setDate(endDate.getDate() + 4)
+    return { ...cycle, end_date: calc.formatDateToString(endDate) }
+  })
+}
+
 // ─── 1. Canonical Version Invariance ──────────────────────────────────────────
 
 console.log("Section 1: Canonical Application Version Invariance")
 const pkg = JSON.parse(fs.readFileSync("package.json", "utf8"))
 const versionTs = fs.readFileSync("lib/version.ts", "utf8")
-assert.equal(pkg.version, "1.22.2", "package.json version must remain 1.22.2")
+assert.equal(pkg.version, "1.22.3", "package.json version must remain 1.22.3")
 assert.ok(versionTs.includes("packageJson.version"), "lib/version.ts APP_VERSION sources canonical packageJson.version")
 assert.ok(versionTs.includes("`v${packageJson.version}`"), "lib/version.ts APP_VERSION_LABEL sources canonical packageJson.version")
-console.log("  ✔ Application version exactly 1.22.2 (v1.22.2) preserved.\n")
+console.log("  ✔ Application version exactly 1.22.3 (v1.22.3) preserved.\n")
 
 // ─── 2. Priority 1: Multi-Device MPIN Logic ───────────────────────────────────
 
@@ -126,10 +138,10 @@ assert.equal(estFallback.estimatedStartDate, "2026-10-27", "Oct 3 + typical 24d 
 console.log("  ✔ Fallback to typical cycle length operates correctly when history is limited.")
 
 // 3.5 Outlier handling & sub-normal interval rejection (< 21 days for < 3 cycles)
-const historyWithAnomalous20d = [
+const historyWithAnomalous20d = completeHistoricalPeriods([
   createCycle("2026-10-03"),
   createCycle("2026-09-13"),
-]
+])
 const lengths20d = calc.getCompletedCycleLengths(historyWithAnomalous20d)
 assert.deepEqual(lengths20d, [], "Sub-normal 20-day interval filtered out when < 3 cycles exist")
 assert.equal(calc.calculateAverageCycleLength(historyWithAnomalous20d), null, "Does not allow single anomalous 20d interval to dominate average")
@@ -147,12 +159,12 @@ assert.equal(estWith20d.estimatedStartDate, "2026-10-26", "Oct 3 + typical 23d =
 console.log("  ✔ Sub-normal 20-day interval correctly handled without skewing predictions.")
 
 // 3.6 Consecutive cycles with consistent lengths (e.g. 23 days each)
-const consistentHistory = [
+const consistentHistory = completeHistoricalPeriods([
   createCycle("2026-10-03"),
   createCycle("2026-09-10"), // Sep 10 to Oct 3 = 23 days
   createCycle("2026-08-18"), // Aug 18 to Sep 10 = 23 days
   createCycle("2026-07-26"), // Jul 26 to Aug 18 = 23 days
-]
+])
 const consistentLengths = calc.getCompletedCycleLengths(consistentHistory)
 assert.deepEqual(consistentLengths, [23, 23, 23], "All three intervals are 23 days")
 assert.equal(calc.calculateAverageCycleLength(consistentHistory), 23)
@@ -170,13 +182,13 @@ assert.equal(estConsistent.estimatedStartDate, "2026-10-26")
 console.log("  ✔ Consecutive historical cycles reliably produce calculated average.")
 
 // 3.7 MAD outlier rejection with variable history:
-const historyWithOutlier = [
+const historyWithOutlier = completeHistoricalPeriods([
   createCycle("2026-10-03"),
   createCycle("2026-09-10"), // 23 days
   createCycle("2026-08-18"), // 23 days
   createCycle("2026-07-26"), // 23 days
   createCycle("2026-06-12"), // 44 days (outlier)
-]
+])
 const filteredLengths = calc.getCompletedCycleLengths(historyWithOutlier)
 assert.ok(!filteredLengths.includes(44), "44-day anomalous cycle rejected by MAD filter")
 assert.equal(calc.calculateAverageCycleLength(historyWithOutlier), 23, "Average remains 23 days despite 44d anomaly")

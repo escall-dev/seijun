@@ -593,6 +593,11 @@ function CycleEstimatesCard({
                         : `${d.estimatedNextPeriodDaysUntil} days away (estimate)`}
                     </p>
                   )}
+                  <p className="text-[10px] text-muted-foreground">
+                    {d.isProvisional
+                      ? "Provisional estimate · more history may improve it"
+                      : `${(d.confidence ?? "low")[0].toUpperCase()}${(d.confidence ?? "low").slice(1)} confidence based on recorded history`}
+                  </p>
                 </div>
               )}
               {d.averageCycleLength !== null && (

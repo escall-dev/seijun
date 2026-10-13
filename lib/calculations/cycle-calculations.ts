@@ -259,35 +259,57 @@ function median(values: number[]): number {
  * 2. Deduplicates same-day cycle records.
  * 3. Intervals between starts < 18 days are treated as non-cycle bleeding/spotting artifacts and excluded.
  * 4. Maximum interval cap: 90 days (intervals > 90d represent amenorrhea/missed cycles, not typical cycle length).
- * 5. Established history (>= 3 intervals): applies Median Absolute Deviation (MAD) outlier filtering.
+ * 5. Uses only the six most recent usable intervals, then applies Median Absolute Deviation (MAD) outlier filtering when at least three remain.
  * 6. Limited history (< 3 intervals): filters out sub-normal (< 21 days) or extreme (> 60 days) intervals
  *    to prevent a single anomalous entry from dominating predictions.
  */
 export function getCompletedCycleLengths(cycles: CycleRecord[], referenceDate = getTodayDateString()): number[] {
-  if (!cycles || cycles.length === 0) return []
+  if (!cycles?.length || !isValidDateString(referenceDate)) return []
 
-  const starts = [...new Set(
-    cycles
-      .map((c) => c.start_date)
-      .filter((date) => isValidDateString(date) && date <= referenceDate)
-  )].sort()
-
-  if (starts.length < 2) return []
-
-  const intervals: number[] = []
-  for (let i = 0; i < starts.length - 1; i++) {
-    const days = calculateDaysBetween(starts[i], starts[i + 1])
-    if (days >= 18 && days <= 90) {
-      intervals.push(days)
-    }
+  // Duplicate starts are collapsed only when their period records agree. A conflicting
+  // duplicate is ambiguous and is excluded as an interval boundary.
+  const grouped = new Map<string, CycleRecord[]>()
+  for (const cycle of cycles) {
+    const start = cycle?.start_date
+    if (!isValidDateString(start) || start > referenceDate) continue
+    const group = grouped.get(start) ?? []
+    group.push(cycle)
+    grouped.set(start, group)
   }
 
-  const recentIntervals = intervals.slice(-12)
+  const records = [...grouped.entries()]
+    .map(([start_date, group]) => {
+      const signatures = new Set(group.map((cycle) => cycle.end_date ?? "ongoing"))
+      const endDate = group[0].end_date
+      const validEnd = !endDate || (isValidDateString(endDate) && endDate >= start_date && endDate <= referenceDate)
+      return {
+        start_date,
+        end_date: endDate,
+        usable: signatures.size === 1 && validEnd,
+      }
+    })
+    .sort((a, b) => a.start_date.localeCompare(b.start_date))
+
+  if (records.length < 2) return []
+
+  const intervals: number[] = []
+  for (let i = 0; i < records.length - 1; i++) {
+    const current = records[i]
+    const next = records[i + 1]
+    if (!current.usable || !next.usable) continue
+    // A missing end date means the period is ongoing. If another period starts,
+    // or the recorded end reaches/passes that start, the pair is contradictory.
+    if (!current.end_date || current.end_date >= next.start_date) continue
+    const days = calculateDaysBetween(current.start_date, next.start_date)
+    if (days >= 18 && days <= 90) intervals.push(days)
+  }
+
+  // Only the six most recent usable intervals participate in prediction.
+  const recentIntervals = intervals.slice(-6)
   if (recentIntervals.length === 0) return []
 
   if (recentIntervals.length < 3) {
-    // Limited history (< 3 intervals): only accept plausible normal cycles (21-60 days).
-    // Sub-normal intervals (< 21 days) are not permitted to dominate without established multi-cycle evidence.
+    // Limited history (< 3 intervals): retain the established 21–60 day guard.
     return recentIntervals.filter((days) => days >= 21 && days <= 60)
   }
 
@@ -342,6 +364,28 @@ export interface EstimatedNextPeriod {
   isFallback: boolean // True if using profile typical_cycle_length rather than completed history
   cycleLengthUsed: number
   statusDescription: string
+  confidence: "low" | "moderate" | "high"
+  isProvisional: boolean
+}
+
+/**
+ * Confidence is intentionally conservative: fewer than six usable intervals
+ * is provisional; high confidence requires six intervals with median absolute
+ * deviation (MAD) no greater than two days. Moderate requires four intervals
+ * and MAD no greater than five days. These are product clarity thresholds,
+ * not medical confidence or certainty.
+ */
+function getPredictionConfidence(lengths: number[], isFallback: boolean): {
+  confidence: EstimatedNextPeriod["confidence"]
+  isProvisional: boolean
+} {
+  if (isFallback || lengths.length < 3) return { confidence: "low", isProvisional: true }
+  const center = median(lengths)
+  const deviation = median(lengths.map((days) => Math.abs(days - center)))
+  const isProvisional = lengths.length < 6
+  if (lengths.length >= 6 && deviation <= 2) return { confidence: "high", isProvisional: false }
+  if (lengths.length >= 4 && deviation <= 5) return { confidence: "moderate", isProvisional }
+  return { confidence: "low", isProvisional }
 }
 
 /**
@@ -363,10 +407,10 @@ export function calculateEstimatedNextPeriod(params: {
     referenceDateStr = getTodayDateString(),
   } = params
 
-  if (!latestCycleStartDate) return null
+  if (!latestCycleStartDate || !isValidDateString(latestCycleStartDate) || !isValidDateString(referenceDateStr) || latestCycleStartDate > referenceDateStr) return null
 
   const historicalLength = params.cycles ? calculateAverageCycleLength(params.cycles, referenceDateStr) : averageCycleLength
-  const hasHistory = historicalLength !== null && historicalLength > 0
+  const hasHistory = historicalLength !== null && Number.isFinite(historicalLength) && historicalLength >= 18 && historicalLength <= 90
   const cycleLength = hasHistory ? historicalLength! : (typicalCycleLength && typicalCycleLength >= 18 && typicalCycleLength <= 90 ? typicalCycleLength : 28)
 
   if (!cycleLength || !Number.isFinite(cycleLength) || cycleLength < 18 || cycleLength > 90) return null
@@ -387,6 +431,9 @@ export function calculateEstimatedNextPeriod(params: {
     statusDescription = `Estimated date has passed (~${Math.abs(daysUntil)} days ago) · cycle continues`
   }
 
+  const historyLengths = getCompletedCycleLengths(params.cycles ?? [], referenceDateStr)
+  const confidence = getPredictionConfidence(historyLengths, !hasHistory)
+
   return {
     ...getExpectedPeriodWindow(params.cycles ?? [], latestCycleStartDate, referenceDateStr),
     estimatedStartDate,
@@ -394,6 +441,7 @@ export function calculateEstimatedNextPeriod(params: {
     isFallback: !hasHistory,
     cycleLengthUsed: cycleLength,
     statusDescription,
+    ...confidence,
   }
 }
 

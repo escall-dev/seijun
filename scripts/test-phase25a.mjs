@@ -1,8 +1,8 @@
 /**
- * Seijun Phase 25A Test Suite — v1.22.2
+ * Seijun Phase 25A Test Suite — v1.22.3
  *
  * Verifies:
- *  1. Canonical application version is exactly 1.22.2
+ *  1. Canonical application version is exactly 1.22.3
  *  2. Period record status calculation rules (In Progress, Done, invalid combinations)
  *  3. Period record integrity in getLatestPeriod and getSharedPeriodStatus
  *  4. Remembered-account logout routing and session preservation
@@ -21,7 +21,7 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 const ROOT = path.resolve(__dirname, "..")
 
-console.log("🌸 Running Seijun Phase 25A Test Suite (v1.22.2)...")
+console.log("🌸 Running Seijun Phase 25A Test Suite (v1.22.3)...")
 
 let passedCount = 0
 function test(name, fn) {
@@ -39,18 +39,18 @@ function test(name, fn) {
 // ─── 1. Canonical Version Invariance ──────────────────────────────────────────
 console.log("\n--- 1. Canonical Application Version Invariance ---")
 
-test("package.json version is exactly 1.22.2", () => {
+test("package.json version is exactly 1.22.3", () => {
   const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8"))
-  assert.equal(pkg.version, "1.22.2", "package.json version must be 1.22.2")
+  assert.equal(pkg.version, "1.22.3", "package.json version must be 1.22.3")
 })
 
-test("package-lock.json version is exactly 1.22.2", () => {
+test("package-lock.json version is exactly 1.22.3", () => {
   const pkgLock = JSON.parse(fs.readFileSync(path.join(ROOT, "package-lock.json"), "utf8"))
-  assert.equal(pkgLock.version, "1.22.2", "package-lock.json version must be 1.22.2")
-  assert.equal(pkgLock.packages[""].version, "1.22.2", "package-lock root package version must be 1.22.2")
+  assert.equal(pkgLock.version, "1.22.3", "package-lock.json version must be 1.22.3")
+  assert.equal(pkgLock.packages[""].version, "1.22.3", "package-lock root package version must be 1.22.3")
 })
 
-test("lib/version.ts canonical export is exactly 1.22.2", () => {
+test("lib/version.ts canonical export is exactly 1.22.3", () => {
   const versionTs = fs.readFileSync(path.join(ROOT, "lib/version.ts"), "utf8")
   assert.match(versionTs, /APP_VERSION(?::\s*\w+)?\s*=\s*packageJson\.version/, "lib/version.ts must read packageJson.version")
 })

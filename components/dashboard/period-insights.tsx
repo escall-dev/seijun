@@ -161,6 +161,11 @@ export function PeriodInsights({
                   ? `Based on typical ${estimatedNextPeriod.cycleLengthUsed}d cycle`
                   : `Based on historical ${estimatedNextPeriod.cycleLengthUsed}d cycle`}. Dates are estimates, not deadlines.
               </p>
+              <p className="text-[10px] sm:text-[11px] text-muted-foreground/80 leading-tight">
+                {estimatedNextPeriod.isProvisional
+                  ? "Provisional estimate · more history may improve it"
+                  : `${estimatedNextPeriod.confidence[0].toUpperCase()}${estimatedNextPeriod.confidence.slice(1)} confidence based on recorded history`}
+              </p>
             </div>
           ) : (
             <div className="space-y-1">

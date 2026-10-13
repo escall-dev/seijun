@@ -55,6 +55,8 @@ export interface SharedCycleEstimate {
   windowStartDate?: string | null
   windowEndDate?: string | null
   isFallback?: boolean
+  confidence?: "low" | "moderate" | "high"
+  isProvisional?: boolean
 }
 
 /**
@@ -100,6 +102,8 @@ export async function getSharedCycleEstimates(
           averagePeriodDuration: null,
           currentCycleStartDate: null,
           cycleProgress: null,
+          confidence: "low",
+          isProvisional: true,
         },
       }
     }
@@ -179,6 +183,8 @@ export async function getSharedCycleEstimates(
         windowStartDate: estimatedNextPeriod?.windowStartDate ?? null,
         windowEndDate: estimatedNextPeriod?.windowEndDate ?? null,
         isFallback: estimatedNextPeriod?.isFallback ?? false,
+        confidence: estimatedNextPeriod?.confidence ?? "low",
+        isProvisional: estimatedNextPeriod?.isProvisional ?? true,
       },
     }
   } catch {
