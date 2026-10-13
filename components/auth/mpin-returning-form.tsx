@@ -219,18 +219,18 @@ export function MpinReturningForm({
     .join(" ")
 
   return (
-    <div className="w-full max-w-md mx-auto min-h-full flex-1 flex flex-col justify-between px-4 sm:px-6 py-4 sm:py-6 pt-[max(1.25rem,env(safe-area-inset-top))] pb-[env(safe-area-inset-bottom)]">
+    <div className="w-full max-w-md mx-auto min-h-full flex-1 flex flex-col justify-between px-4 sm:px-6 py-4 sm:py-6 pt-[max(1.25rem,env(safe-area-inset-top))] pb-[env(safe-area-inset-bottom)] [@media(max-height:640px)]:pt-3">
       {/* ── Form content: centered in upper/middle portion of viewport ── */}
-      <div className="w-full flex-1 flex flex-col justify-center my-auto py-2 space-y-5 sm:space-y-6">
+      <div className="w-full flex-1 flex flex-col justify-center my-auto py-2 space-y-5 sm:space-y-6 [@media(max-height:640px)]:py-0 [@media(max-height:640px)]:space-y-2">
         {/* Header & Logo Section */}
-        <div className="flex flex-col items-center text-center space-y-2.5">
+        <div className="flex flex-col items-center text-center space-y-2.5 [@media(max-height:640px)]:space-y-1.5">
           {/* Highlighted Standalone Seijun Tulip Logo */}
           <div className="relative flex items-center justify-center pt-1 pb-1">
             <div
               className="absolute size-24 rounded-full bg-primary/15 dark:bg-primary/25 blur-xl pointer-events-none -z-10"
               aria-hidden="true"
             />
-            <RediLogo size="xl" className="drop-shadow-md transition-transform hover:scale-105 duration-300" />
+            <RediLogo size="xl" className="drop-shadow-md transition-transform hover:scale-105 duration-300 [@media(max-height:640px)]:size-12" />
           </div>
 
           {/* Welcome Back & Subtitle */}
@@ -385,7 +385,7 @@ export function MpinReturningForm({
       </div>
 
       {/* ── Bottom: Credits + Meadow nicely balanced slightly above bottom edge ── */}
-      <footer className="shrink-0 flex flex-col items-center justify-end w-full pt-4 sm:pt-6">
+      <footer className="shrink-0 flex flex-col items-center justify-end w-full pt-4 sm:pt-6 [@media(max-height:640px)]:pt-2">
         {/* Version badge & Credits — stacked right above meadow */}
         <div className="flex flex-col items-center justify-center space-y-1 pb-1.5 text-center pointer-events-auto">
           <div className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground/75">
@@ -401,8 +401,8 @@ export function MpinReturningForm({
         </div>
 
         {/* Botanical Tulip Grass Meadow Illustration */}
-        <div className="relative left-1/2 w-screen -translate-x-1/2 leading-none sm:static sm:w-full sm:translate-x-0" aria-hidden="true">
-          <SeijunMeadow />
+        <div className="w-screen h-[calc(27.5vw-0.55rem)] leading-none [&_svg]:h-full sm:w-full sm:h-auto sm:[&_svg]:h-auto" aria-hidden="true">
+          <SeijunMeadow className="w-full h-full sm:h-auto" />
         </div>
       </footer>
     </div>
