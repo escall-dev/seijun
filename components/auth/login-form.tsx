@@ -587,7 +587,7 @@ export function LoginForm({ version }: LoginFormProps = {}) {
         </div>
 
         {/* Botanical Tulip Grass Meadow Illustration */}
-        <div className="w-full leading-none" aria-hidden="true">
+        <div className="relative left-1/2 w-screen -translate-x-1/2 leading-none sm:static sm:w-full sm:translate-x-0" aria-hidden="true">
           <SeijunMeadow />
         </div>
       </footer>
