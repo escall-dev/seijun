@@ -31,7 +31,7 @@ export function AppShell({ children, className, initialContext }: AppShellProps)
     <SessionTimeoutProvider>
       {isAuthRoute ? (
         pathname === "/login" ? (
-          <div className="relative min-h-screen min-h-dvh flex flex-col justify-between bg-background text-foreground overflow-x-clip">
+          <div className="relative h-dvh flex flex-col bg-background text-foreground overflow-x-clip">
             <main className="w-full flex-1 flex flex-col min-h-0">{children}</main>
           </div>
         ) : (

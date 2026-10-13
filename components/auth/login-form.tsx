@@ -412,7 +412,7 @@ export function LoginForm({ version }: LoginFormProps = {}) {
       : null)
 
   return (
-    <div className="w-full max-w-md mx-auto min-h-full flex-1 flex flex-col justify-between px-4 sm:px-6 py-4 sm:py-6 pt-[max(1.25rem,env(safe-area-inset-top))] pb-[env(safe-area-inset-bottom)] [@media(max-height:640px)]:pt-3">
+    <div className="w-full max-w-md mx-auto min-h-0 flex-1 flex flex-col justify-between px-4 sm:px-6 py-4 sm:py-6 pt-[max(1.25rem,env(safe-area-inset-top))] pb-[env(safe-area-inset-bottom)] [@media(max-height:640px)]:pt-3">
       {/* ── Form content: centered in upper/middle portion of viewport ── */}
       <div className="w-full flex-1 flex flex-col justify-center my-auto py-2 space-y-4 sm:space-y-5 [@media(max-height:640px)]:py-0 [@media(max-height:640px)]:space-y-2">
         {/* Header & Logo Section */}
