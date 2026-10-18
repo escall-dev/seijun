@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button"
 import {
   Bell,
   BellRing,
-  User,
   HeartHandshake,
   Users,
   ShieldCheck,
@@ -19,7 +18,6 @@ import {
   FileText,
   Activity,
   UserCheck,
-  Info,
   Clock,
   Laptop,
   Volume2,
@@ -102,7 +100,7 @@ export function NotificationPreferencesCard({
 
   // Device push status telemetry
   const [devicePushActive, setDevicePushActive] = React.useState<boolean | null>(null)
-  const [permissionState, setPermissionState] = React.useState<string>("default")
+  const [permissionState, setPermissionState] = React.useState<string>("checking")
   const [enablingPush, setEnablingPush] = React.useState<boolean>(false)
 
   React.useEffect(() => {
@@ -145,6 +143,7 @@ export function NotificationPreferencesCard({
           if (isMounted) setDevicePushActive(false)
         }
       } else {
+        if (isMounted) setPermissionState("unsupported")
         if (isMounted) setDevicePushActive(false)
       }
     }
@@ -265,9 +264,16 @@ export function NotificationPreferencesCard({
         })
       } else {
         setPermissionState(getNotificationPermission())
+        setBannerMessage({
+          type: "error",
+          text: res.message || "Could not enable browser notifications on this device.",
+        })
       }
     } catch {
-      // Ignore
+      setBannerMessage({
+        type: "error",
+        text: "Could not enable browser notifications. Please try again.",
+      })
     } finally {
       setEnablingPush(false)
     }
@@ -385,6 +391,10 @@ export function NotificationPreferencesCard({
                       ? "Granted"
                       : permissionState === "denied"
                       ? "Blocked in browser"
+                      : permissionState === "unsupported"
+                      ? "Not supported by this browser"
+                      : permissionState === "checking"
+                      ? "Checking…"
                       : "Not requested yet"}
                   </span>
                 </p>
@@ -403,7 +413,7 @@ export function NotificationPreferencesCard({
                 {devicePushActive ? "Active on this device" : "Device inactive"}
               </Badge>
 
-              {permissionState === "default" && (
+              {(permissionState === "default" || permissionState === "granted") && !devicePushActive && (
                 <Button
                   type="button"
                   size="sm"
@@ -417,11 +427,21 @@ export function NotificationPreferencesCard({
                   ) : (
                     <Sparkles className="size-3 text-primary" />
                   )}
-                  <span>Enable Push</span>
+                  <span>{permissionState === "granted" ? "Finish Setup" : "Enable Push"}</span>
                 </Button>
               )}
             </div>
           </div>
+          {permissionState === "denied" && (
+            <p className="rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-[11px] leading-relaxed text-muted-foreground">
+              Notifications are blocked for this site. Allow them in your browser or device settings, reload this page, then select Enable Push.
+            </p>
+          )}
+          {permissionState === "unsupported" && (
+            <p className="rounded-lg border border-border/70 bg-background/70 px-3 py-2 text-[11px] leading-relaxed text-muted-foreground">
+              This browser does not support push notifications. You can still manage your reminder preferences here.
+            </p>
+          )}
         </div>
 
         {/* B. Notification Sound Controls */}

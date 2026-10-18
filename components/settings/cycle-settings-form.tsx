@@ -252,6 +252,16 @@ export function CycleSettingsForm({ initialData }: CycleSettingsFormProps) {
             </span>
           </div>
 
+          <div className="flex items-start gap-2.5 rounded-xl bg-lavender/30 p-3.5 border border-lavender-border/50 text-xs text-muted-foreground leading-relaxed">
+            <CalendarHeart className="size-4 text-primary shrink-0 mt-0.5" />
+            <div>
+              <p className="font-medium text-foreground">How your next period estimate changes</p>
+              <p className="mt-1">
+                Until Seijun can calculate completed cycle intervals from your history, it uses the typical cycle length you set below. With usable history, it uses the median of up to six recent intervals and filters unusually different intervals when enough history is available. Recording period starts and completing more cycles can update the estimate.
+              </p>
+            </div>
+          </div>
+
           {/* Typical Cycle Length */}
           <div className="space-y-1.5">
             <Label htmlFor="typicalCycleLength" className="text-sm font-medium">

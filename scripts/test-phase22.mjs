@@ -35,8 +35,17 @@ assert.equal(calc.calculateCurrentCycleDay(completedPeriodCycle.start_date, "202
 assert.equal(calc.getRecordedCycleEnd(completedPeriodCycle, [completedPeriodCycle]), null)
 assert.equal(calc.calculateAverageCycleLength([]), null)
 assert.equal(calc.calculateAverageCycleLength([cycle("2026-01-01")]), null)
-assert.equal(calc.calculateAverageCycleLength([cycle("2026-01-01"), cycle("2026-01-29")]), 28)
-const history = ["2026-01-01", "2026-01-29", "2026-02-26", "2026-03-27", "2026-06-15"].map(cycle)
+assert.equal(calc.calculateAverageCycleLength([
+  { ...cycle("2026-01-01"), end_date: "2026-01-05" },
+  { ...cycle("2026-01-29"), end_date: "2026-02-02" },
+]), 28)
+const history = [
+  { ...cycle("2026-01-01"), end_date: "2026-01-05" },
+  { ...cycle("2026-01-29"), end_date: "2026-02-02" },
+  { ...cycle("2026-02-26"), end_date: "2026-03-02" },
+  { ...cycle("2026-03-27"), end_date: "2026-03-31" },
+  { ...cycle("2026-06-15"), end_date: "2026-06-19" },
+]
 assert.equal(calc.calculateAverageCycleLength(history), 28)
 assert.deepEqual(calc.getCompletedCycleLengths(history, "2026-06-16"), [28, 28, 29])
 assert.equal(calc.calculateAverageCycleLength([cycle("2026-01-01"), cycle("2026-03-22")]), null)
@@ -186,6 +195,7 @@ try {
   assert.equal((await db.query("SELECT count(*)::int count FROM public.notification_events")).rows[0].count,2)
   // Exercise the real server dispatcher against the SQL claims; mock only push transport.
   const deliveredPayloads = []
+  const queriedPushRecipients = []
   let transportFails = false, attempts = 0
   const admin = {
     from(table) {
@@ -193,7 +203,12 @@ try {
       let deleting = false
       const builder = {
         select() { return builder },
-        eq(column, value) { parameters.push(value); conditions.push(`${column}=$${parameters.length}`); return builder },
+        eq(column, value) {
+          parameters.push(value)
+          conditions.push(`${column}=$${parameters.length}`)
+          if (table === "push_subscriptions" && column === "user_id") queriedPushRecipients.push(value)
+          return builder
+        },
         is(column) { conditions.push(`${column} IS NULL`); return builder },
         contains(column, value) { parameters.push(JSON.stringify(value)); conditions.push(`${column} @> $${parameters.length}::jsonb`); return builder },
         limit() { return builder }, delete() { deleting = true; return builder },
@@ -230,8 +245,21 @@ try {
   await Promise.all([dispatcherExports.deliverNoteNotifications(pushNote.id),dispatcherExports.deliverNoteNotifications(pushNote.id)])
   assert.equal(deliveredPayloads.length,1)
   assert.equal(deliveredPayloads[0].data.url,"/notes?view=partner")
+  assert.equal(queriedPushRecipients.at(-1),partner)
   assert.ok(!JSON.stringify(deliveredPayloads[0]).includes(pushNote.content))
   await db.exec("RESET ROLE")
+
+  // Reverse direction: a supporter-authored note must notify the cycle owner.
+  await db.query("UPDATE public.notification_preferences SET partner_daily_notes=true WHERE user_id=$1",[owner])
+  const replyNote = (await save(partner,"Reply content must stay out of push")).rows[0]
+  await db.exec("SET ROLE service_role")
+  await dispatcherExports.deliverNoteNotifications(replyNote.id)
+  assert.equal(deliveredPayloads.length,2)
+  assert.equal(queriedPushRecipients.at(-1),owner)
+  assert.equal(deliveredPayloads[1].data.url,"/notes?tab=partner")
+  assert.ok(!JSON.stringify(deliveredPayloads[1]).includes(replyNote.content))
+  await db.exec("RESET ROLE")
+
   transportFails = true
   const failedPushNote = (await save(owner,"Save survives transport failure")).rows[0]
   await db.exec("SET ROLE service_role")
