@@ -1,0 +1,19 @@
+# Dependencies & build outputs
+node_modules/
+.next/
+out/
+build/
+coverage/
+.vercel/
+
+# Lockfiles & generated TypeScript metadata
+package-lock.json
+*.tsbuildinfo
+next-env.d.ts
+
+# Static media & scratch files
+public/
+icon-logo/
+notification_sound/
+.codex-remote-attachments/
+scratch/

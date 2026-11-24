@@ -7,3 +7,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
 
 <!-- END:nextjs-agent-rules -->
+
+## Graphify
+
+For code structure, symbol definitions, callers, dependencies, or change impact, call Graphify MCP tools (`query_graph`, `graphify_find`, `graphify_callers`, `graphify_impact`, `review_status`) before `grep` or speculative file reads. Read only the exact files and line ranges returned, cite `file:line` evidence, and check Graphify Memory when relevant. Use `grep` only for exact strings/config keys. If Graphify is unavailable or this repo is not indexed, state why in one line and fall back to targeted `grep`/reads.
